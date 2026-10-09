@@ -149,6 +149,22 @@ Dans `claude_desktop_config.json` (Windows : `%APPDATA%\Claude\claude_desktop_co
 
 Redémarre Claude Desktop : `cesi_check_session` et `cesi_login` doivent apparaître.
 
+## Exploration avec Claude Code (Playwright MCP)
+
+`.mcp.json` déclare un serveur `playwright` ([Playwright MCP](https://github.com/microsoft/playwright-mcp), version figée en devDependency) qui navigue avec la session CESIBridge :
+
+- `--storage-state data/state.json` + `--isolated` : la session est chargée en mémoire, le fichier n'est jamais modifié ;
+- `--allowed-origins` : ENT, `wayf.cesi.fr`, ADFS, Moodle et Scholarvox uniquement (les autres requêtes sont bloquées) ;
+- `.claude/settings.json` : navigation et lecture autorisées, clics et saisies soumis à confirmation, exécution de code et envoi de fichiers interdits.
+
+Mise en place :
+
+1. `npm install`, puis `npm run mcp:browsers` (Chromium attendu par Playwright MCP).
+2. Une session valide : `npm run sync` (login automatique).
+3. Ouvrir Claude Code dans le projet et approuver le serveur `playwright` au premier lancement.
+
+⚠️ Le modèle agit avec votre compte : le texte des pages (forums, devoirs) peut contenir des instructions, à ne pas suivre. Les résultats de l'exploration sont dans [docs/exploration.md](docs/exploration.md).
+
 ## Développement
 
 ```bash

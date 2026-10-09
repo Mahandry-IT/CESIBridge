@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "playwright": {
+      "command": "node",
+      "args": [
+        "node_modules/@playwright/mcp/cli.js",
+        "--browser",
+        "chromium",
+        "--isolated",
+        "--storage-state",
+        "data/state.json",
+        "--allowed-origins",
+        "https://ent.cesi.fr;https://wayf.cesi.fr;https://sts.viacesi.fr;https://moodle.cesi.fr;https://univ.scholarvox.com",
+        "--output-dir",
+        "data/playwright-mcp"
+      ]
+    }
+  }
+}
