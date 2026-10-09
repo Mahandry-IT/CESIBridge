@@ -7,7 +7,10 @@ import { discoverCodePersonne } from '../src/schedule/codePersonne.js';
 import { fetchWeekWithRetry } from '../src/schedule/client.js';
 import { mapSeance } from '../src/schedule/mapping.js';
 import { weekRanges } from '../src/schedule/weeks.js';
-import { applySchema, createPool, replaceWeek } from '../src/db/seances.js';
+import { applySchema, createPool, listWeek, replaceWeek } from '../src/db/seances.js';
+import { createTokenProvider } from '../src/google/auth.js';
+import { createCalendarClient } from '../src/google/client.js';
+import { formatCounts, publishWeek } from '../src/google/publish.js';
 import { log } from '../src/log.js';
 
 let config;
@@ -49,6 +52,27 @@ async function login() {
   return context.request;
 }
 
+// Google facultatif : une erreur n'annule pas la base, mais arrête les publications suivantes.
+const calendar = config.google
+  ? createCalendarClient({
+      calendarId: config.google.calendarId,
+      getToken: createTokenProvider(config.google.keyFile),
+    })
+  : null;
+let googleFailure = null;
+
+async function publishToGoogle(codePersonne, range) {
+  if (!calendar) return '';
+  if (googleFailure) return ', Google non publié';
+  try {
+    const counts = await publishWeek(calendar, range, await listWeek(pool, codePersonne, range));
+    return `, ${formatCounts(counts)}`;
+  } catch (error) {
+    googleFailure = error.message;
+    return ', Google échec';
+  }
+}
+
 let pool;
 let exitCode = 0;
 try {
@@ -86,11 +110,18 @@ try {
     );
     const seances = raws.map((raw) => mapSeance(raw, codePersonne));
     await replaceWeek(pool, codePersonne, range, seances);
-    summary.push(`${range.start} → ${range.end} : ${seances.length} séance(s)`);
+    const google = await publishToGoogle(codePersonne, range);
+    summary.push(`${range.start} → ${range.end} : ${seances.length} séance(s)${google}`);
   }
   // Cookies éventuellement rafraîchis par l'ENT pendant la synchro : on garde la version la plus récente.
   await saveState(context, config.statePath);
   log(`Synchronisation terminée :\n  ${summary.join('\n  ')}`);
+  if (googleFailure) {
+    exitCode = 1;
+    log(
+      `Publication Google interrompue (base à jour) : ${googleFailure}. Relancer avec "npm run publish".`,
+    );
+  }
 } catch (error) {
   exitCode = 1;
   log(
@@ -100,4 +131,5 @@ try {
   await browser?.close();
   await pool?.end();
 }
-process.exit(exitCode);
+// exitCode plutôt que exit() : laisse se fermer les sockets fetch (sinon assertion libuv sous Windows).
+process.exitCode = exitCode;

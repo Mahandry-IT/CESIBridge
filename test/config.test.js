@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadConfig, loadSyncConfig } from '../src/config.js';
+import { ConfigError, loadConfig, loadPublishConfig, loadSyncConfig } from '../src/config.js';
 
 const validEnv = {
   CESI_ENT_URL: 'https://ent.example.fr/',
@@ -106,5 +106,46 @@ describe('loadSyncConfig', () => {
   it('accepte les bornes 1 et 8', () => {
     expect(loadSyncConfig({ ...syncEnv, CESI_SCHEDULE_WEEKS: '1' }).scheduleWeeks).toBe(1);
     expect(loadSyncConfig({ ...syncEnv, CESI_SCHEDULE_WEEKS: '8' }).scheduleWeeks).toBe(8);
+  });
+});
+
+describe('configuration Google', () => {
+  const env = {
+    ...validEnv,
+    CESI_EMAIL: 'a.b@viacesi.fr',
+    CESI_PASSWORD: 's3cret',
+    DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  };
+  const google = {
+    GOOGLE_CALENDAR_ID: 'cal@group.calendar.google.com',
+    GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/k.json',
+  };
+
+  it('est absente par défaut, chaînes vides comprises', () => {
+    expect(loadSyncConfig(env).google).toBeNull();
+    expect(
+      loadSyncConfig({ ...env, GOOGLE_CALENDAR_ID: '', GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '' })
+        .google,
+    ).toBeNull();
+  });
+
+  it('est lue quand les deux variables sont définies', () => {
+    expect(loadSyncConfig({ ...env, ...google }).google).toEqual({
+      calendarId: 'cal@group.calendar.google.com',
+      keyFile: '/k.json',
+    });
+  });
+
+  it.each([
+    ['agenda seul', { GOOGLE_CALENDAR_ID: 'x' }],
+    ['clé seule', { GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/k.json' }],
+  ])('rejette : %s', (_label, override) => {
+    expect(() => loadSyncConfig({ ...env, ...override })).toThrow(ConfigError);
+  });
+
+  it('publish exige Google mais pas les identifiants CESI', () => {
+    const publishEnv = { DATABASE_URL: env.DATABASE_URL, ...google };
+    expect(loadPublishConfig(publishEnv)).toMatchObject({ scheduleWeeks: 4 });
+    expect(() => loadPublishConfig({ DATABASE_URL: env.DATABASE_URL })).toThrow(ConfigError);
   });
 });
