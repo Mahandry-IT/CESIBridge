@@ -1,0 +1,36 @@
+name: cesibridge
+
+x-common: &common
+  init: true
+  shm_size: 1gb
+  env_file: .env
+  volumes:
+    - cesi-data:/data
+
+services:
+  # Serveur MCP headless. En pratique lancé par le client MCP via `docker run -i` (voir README).
+  mcp:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: mcp
+    image: cesibridge:latest
+    stdin_open: true
+
+  # Login manuel via noVNC : docker compose --profile login run --rm --service-ports login
+  login:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: login
+    image: cesibridge-login:latest
+    profiles: [login]
+    ports:
+      # Uniquement en local : noVNC donne accès à la session CESI.
+      - '127.0.0.1:6080:6080'
+
+volumes:
+  cesi-data:
+    name: cesibridge-data
