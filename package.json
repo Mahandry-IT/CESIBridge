@@ -12,12 +12,14 @@
     "start": "node src/server.js",
     "explore": "node --env-file-if-exists=.env scripts/explore.js",
     "login": "node --env-file-if-exists=.env scripts/login.js",
+    "sync": "node --env-file-if-exists=.env scripts/sync.js",
     "test": "vitest run",
     "lint": "eslint .",
     "format": "prettier --write ."
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
+    "pg": "^8.23.1",
     "playwright": "1.64.0",
     "zod": "^4.6.5"
   },

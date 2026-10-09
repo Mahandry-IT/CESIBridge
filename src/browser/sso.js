@@ -68,3 +68,56 @@ export async function waitForLoggedIn(page, { loggedInHosts, timeoutMs }) {
   }
   throw new Error(`Login non terminé après ${Math.round(timeoutMs / 1000)} s`);
 }
+
+export class LoginError extends Error {
+  name = 'LoginError';
+}
+
+const FORM_TIMEOUT_MS = 15_000;
+const POLL_INTERVAL_MS = 300;
+
+/**
+ * Login automatique (wayf → ADFS), un seul essai : jamais de nouvelle tentative, pour ne pas
+ * verrouiller le compte. Les erreurs ne contiennent ni URL, ni identifiant, ni mot de passe.
+ */
+export async function autoLogin(page, { entUrl, loggedInHosts, timeoutMs, credentials }) {
+  const deadline = Date.now() + timeoutMs;
+  const formTimeout = Math.min(FORM_TIMEOUT_MS, timeoutMs);
+  await page.goto(entUrl, { waitUntil: 'load', timeout: timeoutMs });
+  await settle(page, timeoutMs);
+  if (isLoggedInHost(page.url(), loggedInHosts)) return hostOf(page.url());
+
+  const wayfEmail = page.locator('#login');
+  const adfsUser = page.locator('#userNameInput');
+  const adfsPassword = page.locator('#passwordInput');
+  const adfsError = page.locator('#errorText');
+
+  try {
+    // La page wayf peut être absente (ADFS directement) : on attend l'un ou l'autre.
+    await wayfEmail.or(adfsPassword).first().waitFor({ state: 'visible', timeout: formTimeout });
+    if (await wayfEmail.isVisible()) {
+      await wayfEmail.fill(credentials.email);
+      await wayfEmail.press('Enter');
+    }
+    await adfsPassword.waitFor({ state: 'visible', timeout: formTimeout });
+    // L'identifiant ADFS peut être pré-rempli : on le remplace quand même.
+    if (await adfsUser.isVisible()) await adfsUser.fill(credentials.email);
+    await adfsPassword.fill(credentials.password);
+    const submit = page.locator('#submitButton');
+    if (await submit.isVisible()) await submit.click();
+    else await adfsPassword.press('Enter');
+  } catch (error) {
+    if (error.name !== 'TimeoutError') throw new LoginError('formulaire de login inattendu');
+    throw new LoginError(`formulaire de login introuvable (hôte ${hostOf(page.url())})`);
+  }
+
+  while (Date.now() < deadline) {
+    if (await adfsError.isVisible()) throw new LoginError('identifiants refusés');
+    if (isLoggedInHost(page.url(), loggedInHosts)) {
+      await settle(page, deadline - Date.now());
+      if (isLoggedInHost(page.url(), loggedInHosts)) return hostOf(page.url());
+    }
+    await page.waitForTimeout(POLL_INTERVAL_MS);
+  }
+  throw new LoginError(`Login non terminé après ${Math.round(timeoutMs / 1000)} s`);
+}
