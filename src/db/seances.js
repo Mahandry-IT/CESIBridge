@@ -120,3 +120,58 @@ export async function replaceWeek(pool, codePersonne, range, seances) {
     client.release();
   }
 }
+
+/**
+ * Séances d'une personne sur une semaine (mêmes bornes `YYYY-MM-DD` Europe/Paris que `replaceWeek`),
+ * avec salles, intervenants et groupes, en une seule requête. Même forme que `mapSeance`.
+ */
+export async function listWeek(pool, codePersonne, range) {
+  const { rows } = await pool.query(
+    `SELECT s.code, s.code_personne, s.titre, s.matiere, s.module, s.theme,
+            s.debut, s.fin, s.all_day, s.nightly, s.url,
+            COALESCE((SELECT array_agg(sa.nom_salle ORDER BY sa.nom_salle)
+                      FROM seance_salles sa WHERE sa.seance_code = s.code), '{}') AS salles,
+            COALESCE((SELECT json_agg(json_build_object(
+                                'code', i.code, 'nom', i.nom, 'prenom', i.prenom, 'sousTitre', i.sous_titre)
+                              ORDER BY i.nom, i.prenom, i.code)
+                      FROM seance_intervenants si
+                      JOIN intervenants i ON i.code = si.intervenant_code
+                      WHERE si.seance_code = s.code), '[]'::json) AS intervenants,
+            COALESCE((SELECT json_agg(json_build_object(
+                                'code', g.code, 'libelle', g.libelle, 'codeSession', sg.code_session)
+                              ORDER BY g.libelle, g.code)
+                      FROM seance_groupes sg
+                      JOIN groupes g ON g.code = sg.code_groupe
+                      WHERE sg.seance_code = s.code), '[]'::json) AS groupes
+     FROM seances s
+     WHERE s.code_personne = $1
+       AND s.debut >= ($2::date::timestamp AT TIME ZONE 'Europe/Paris')
+       AND s.debut <  (($3::date + 1)::timestamp AT TIME ZONE 'Europe/Paris')
+     ORDER BY s.debut, s.code`,
+    [codePersonne, range.start, range.end],
+  );
+  return rows.map((row) => ({
+    code: row.code,
+    codePersonne: row.code_personne,
+    titre: row.titre,
+    matiere: row.matiere,
+    module: row.module,
+    theme: row.theme,
+    debut: row.debut,
+    fin: row.fin,
+    allDay: row.all_day,
+    nightly: row.nightly,
+    url: row.url,
+    salles: row.salles,
+    intervenants: row.intervenants,
+    groupes: row.groupes,
+  }));
+}
+
+/** Codes personne présents en base (pour `npm run publish` sans `CESI_CODE_PERSONNE`). */
+export async function listCodesPersonne(pool) {
+  const { rows } = await pool.query(
+    'SELECT DISTINCT code_personne FROM seances ORDER BY code_personne',
+  );
+  return rows.map((row) => row.code_personne);
+}
