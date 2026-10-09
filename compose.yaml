@@ -31,6 +31,44 @@ services:
       # Uniquement en local : noVNC donne accès à la session CESI.
       - '127.0.0.1:6080:6080'
 
+  # PostgreSQL pour la synchronisation de l'emploi du temps : docker compose up -d db
+  db:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?POSTGRES_USER manquant dans .env}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant dans .env}
+      POSTGRES_DB: ${POSTGRES_DB:?POSTGRES_DB manquant dans .env}
+    volumes:
+      - cesi-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}']
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      # Uniquement en local : le sync lancé sur l'hôte (navigateur visible) s'y connecte.
+      - '127.0.0.1:${POSTGRES_HOST_PORT:-5433}:5432'
+
+  # Synchronisation headless : docker compose --profile sync run --rm sync
+  sync:
+    <<: *common
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+      target: mcp
+    image: cesibridge:latest
+    entrypoint: ['node', 'scripts/sync.js']
+    profiles: [sync]
+    environment:
+      CESI_HEADLESS: 'true'
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    depends_on:
+      db:
+        condition: service_healthy
+
 volumes:
   cesi-data:
     name: cesibridge-data
+  cesi-pg:
+    name: cesibridge-pg
