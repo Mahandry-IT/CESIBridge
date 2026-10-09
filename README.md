@@ -82,6 +82,18 @@ Ouvre <http://localhost:6080/vnc.html>, clique sur « Connect » et connecte-toi
 
 Le script affiche le nombre de cookies de session (sans expiration) : ils sont inclus dans le `storageState`. Si `cesi_check_session` répond `expired` juste après un login réussi, c'est le premier point à vérifier.
 
+## Synchronisation de l'emploi du temps
+
+Login automatique (identifiants du `.env`) puis copie des N prochaines semaines dans PostgreSQL.
+
+1. Renseigner dans `.env` : `CESI_EMAIL`, `CESI_PASSWORD`, `DATABASE_URL`, `POSTGRES_*` (voir `.env.example`).
+2. `docker compose up -d db`
+3. `npm run sync` (navigateur visible par défaut ; `CESI_HEADLESS=true` pour le masquer).
+
+En headless dans Docker : `docker compose --profile sync run --rm sync`.
+
+Un seul essai de login par exécution (pas de boucle, pour éviter le verrouillage du compte). Le schéma (`seances`) est créé au démarrage. Si l'API renvoie un format de séance inattendu, l'erreur liste les clés trouvées : adapter `src/schedule/mapping.js`.
+
 ## Intégration Claude Desktop
 
 Dans `claude_desktop_config.json` (Windows : `%APPDATA%\Claude\claude_desktop_config.json`) :
