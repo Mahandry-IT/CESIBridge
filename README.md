@@ -92,7 +92,34 @@ Login automatique (identifiants du `.env`) puis copie des N prochaines semaines 
 
 En headless dans Docker : `docker compose --profile sync run --rm sync`.
 
+Planification automatique (toutes les 2 h de 7 h à 21 h + au démarrage) sur Windows, Linux et macOS : voir [`scheduler/README.md`](scheduler/README.md).
+
 Un seul essai de login par exécution (pas de boucle, pour éviter le verrouillage du compte). Le schéma est géré par des migrations versionnées (`src/db/schema.js`, table `schema_migrations`), appliquées au démarrage sous verrou : `seances`, `seance_salles`, `intervenants`, `seance_intervenants`, `groupes`, `seance_groupes` (relationnel, sans JSON ; les adresses e-mail des intervenants ne sont pas stockées). Si l'API renvoie un format de séance inattendu, l'erreur liste les clés trouvées : adapter `src/schedule/mapping.js`.
+
+## Google Calendar
+
+Après chaque semaine synchronisée, `npm run sync` aligne un agenda Google « CESI » sur la base (création, mise à jour, suppression des seuls événements créés par CESIBridge). Une erreur Google n'annule pas la base : la publication s'arrête, le code de sortie est 1, et `npm run publish` republie les `CESI_SCHEDULE_WEEKS` semaines depuis la base (sans ENT ni navigateur ; code personne : `CESI_CODE_PERSONNE`, sinon celui présent en base).
+
+### Mise en place
+
+1. Créer un projet sur <https://console.cloud.google.com/> et y activer l'API **Google Calendar**.
+2. Créer un **compte de service** (IAM et administration → Comptes de service), puis une clé JSON (onglet Clés → Ajouter une clé). Enregistrer le fichier sous `secrets/google-sa.json` (dossier ignoré par Git et par Docker).
+3. Dans Google Agenda, créer un agenda « CESI » et le partager avec l'e-mail du compte de service (`…@…iam.gserviceaccount.com`) avec la permission « Apporter des modifications aux événements ».
+4. Copier l'ID de l'agenda (Paramètres de l'agenda → Intégrer l'agenda) et renseigner dans `.env` :
+
+```
+GOOGLE_CALENDAR_ID=…@group.calendar.google.com
+GOOGLE_SERVICE_ACCOUNT_KEY_FILE=./secrets/google-sa.json
+```
+
+Les deux variables vont ensemble (une seule définie = erreur). Dans Docker, le service `sync` monte `./secrets` en lecture seule sur `/run/secrets/cesibridge` et lit `google-sa.json`.
+
+Les noms des intervenants figurent dans la description des événements : n'ajouter à l'agenda que des personnes de confiance.
+
+### Voir l'agenda sur le téléphone
+
+- **iPhone** : Réglages → Calendrier → Comptes → Ajouter un compte → Google, activer « Calendriers », puis cocher « CESI » dans l'app Calendrier.
+- **Android** : ouvrir Google Agenda, cocher « CESI » dans la liste ; vérifier que la synchronisation du compte Google est active (Paramètres → Comptes).
 
 ## Intégration Claude Desktop
 

@@ -60,8 +60,14 @@ services:
     image: cesibridge:latest
     entrypoint: ['node', 'scripts/sync.js']
     profiles: [sync]
+    volumes:
+      - cesi-data:/data
+      # Clé du compte de service Google : ./secrets/google-sa.json (jamais dans l'image ni dans Git).
+      - ./secrets:/run/secrets/cesibridge:ro
     environment:
       CESI_HEADLESS: 'true'
+      # Vide (donc ignoré) tant que Google n'est pas configuré dans .env.
+      GOOGLE_SERVICE_ACCOUNT_KEY_FILE: ${GOOGLE_CALENDAR_ID:+/run/secrets/cesibridge/google-sa.json}
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       db:

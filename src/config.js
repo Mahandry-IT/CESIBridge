@@ -26,6 +26,27 @@ const boolFlag = (fallback) =>
     .transform((value) => value === 'true')
     .default(fallback);
 
+// Chaîne vide = variable absente.
+const emptyToUndefined = (value) =>
+  typeof value === 'string' && value.trim() === '' ? undefined : value;
+
+const codePersonneField = z.preprocess(
+  emptyToUndefined,
+  z.string().regex(/^\d+$/, 'chaîne de chiffres attendue').optional(),
+);
+
+const weeksField = z.coerce.number().int().min(1).max(8).default(DEFAULT_SCHEDULE_WEEKS);
+
+const databaseUrlField = z.string().regex(/^postgres(ql)?:\/\/.+/, 'URL postgres:// attendue');
+
+const googleShape = {
+  GOOGLE_CALENDAR_ID: z.preprocess(emptyToUndefined, z.string().trim().min(1).optional()),
+  GOOGLE_SERVICE_ACCOUNT_KEY_FILE: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().min(1).optional(),
+  ),
+};
+
 const baseShape = {
   CESI_ENT_URL: z.url({ protocol: /^https?$/ }),
   CESI_LOGGED_IN_HOSTS: hostList,
@@ -42,13 +63,20 @@ const syncSchema = z.object({
   CESI_EMAIL: z.email(),
   CESI_PASSWORD: z.string().min(1),
   // Facultatif : sinon découvert sur la page emploi du temps après le login.
-  CESI_CODE_PERSONNE: z.preprocess(
-    (value) => (value === '' ? undefined : value),
-    z.string().regex(/^\d+$/, 'chaîne de chiffres attendue').optional(),
-  ),
-  CESI_SCHEDULE_WEEKS: z.coerce.number().int().min(1).max(8).default(DEFAULT_SCHEDULE_WEEKS),
+  CESI_CODE_PERSONNE: codePersonneField,
+  CESI_SCHEDULE_WEEKS: weeksField,
   CESI_HEADLESS: boolFlag(false),
-  DATABASE_URL: z.string().regex(/^postgres(ql)?:\/\/.+/, 'URL postgres:// attendue'),
+  DATABASE_URL: databaseUrlField,
+  ...googleShape,
+});
+
+// `npm run publish` : republie depuis la base, sans ENT ni navigateur. Google est ici obligatoire.
+const publishSchema = z.object({
+  CESI_CODE_PERSONNE: codePersonneField,
+  CESI_SCHEDULE_WEEKS: weeksField,
+  DATABASE_URL: databaseUrlField,
+  GOOGLE_CALENDAR_ID: z.string().trim().min(1),
+  GOOGLE_SERVICE_ACCOUNT_KEY_FILE: z.string().trim().min(1),
 });
 
 export class ConfigError extends Error {
@@ -77,6 +105,19 @@ function baseConfig(parsed) {
   };
 }
 
+// Google est facultatif pour la synchro, mais les deux variables vont ensemble.
+function googleConfig(parsed) {
+  const calendarId = parsed.GOOGLE_CALENDAR_ID;
+  const keyFile = parsed.GOOGLE_SERVICE_ACCOUNT_KEY_FILE;
+  if (calendarId === undefined && keyFile === undefined) return null;
+  if (calendarId === undefined || keyFile === undefined) {
+    throw new ConfigError(
+      'Configuration invalide :\n  - GOOGLE_CALENDAR_ID et GOOGLE_SERVICE_ACCOUNT_KEY_FILE doivent être définies ensemble',
+    );
+  }
+  return Object.freeze({ calendarId, keyFile });
+}
+
 export function loadConfig(env = process.env) {
   return Object.freeze(baseConfig(parseEnv(schema, env)));
 }
@@ -93,5 +134,16 @@ export function loadSyncConfig(env = process.env) {
     scheduleWeeks: parsed.CESI_SCHEDULE_WEEKS,
     headless: parsed.CESI_HEADLESS,
     databaseUrl: parsed.DATABASE_URL,
+    google: googleConfig(parsed),
+  });
+}
+
+export function loadPublishConfig(env = process.env) {
+  const parsed = parseEnv(publishSchema, env);
+  return Object.freeze({
+    codePersonne: parsed.CESI_CODE_PERSONNE,
+    scheduleWeeks: parsed.CESI_SCHEDULE_WEEKS,
+    databaseUrl: parsed.DATABASE_URL,
+    google: googleConfig(parsed),
   });
 }
