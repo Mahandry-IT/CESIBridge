@@ -1,0 +1,9 @@
+node_modules
+.env
+data
+*.har
+state.json
+*.log
+coverage
+.git
+test
