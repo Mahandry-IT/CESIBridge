@@ -92,6 +92,8 @@ Login automatique (identifiants du `.env`) puis copie des N prochaines semaines 
 
 En headless dans Docker : `docker compose --profile sync run --rm sync`.
 
+Planification automatique (toutes les 2 h de 7 h à 21 h + au démarrage) sur Windows, Linux et macOS : voir [`scheduler/README.md`](scheduler/README.md).
+
 Un seul essai de login par exécution (pas de boucle, pour éviter le verrouillage du compte). Le schéma est géré par des migrations versionnées (`src/db/schema.js`, table `schema_migrations`), appliquées au démarrage sous verrou : `seances`, `seance_salles`, `intervenants`, `seance_intervenants`, `groupes`, `seance_groupes` (relationnel, sans JSON ; les adresses e-mail des intervenants ne sont pas stockées). Si l'API renvoie un format de séance inattendu, l'erreur liste les clés trouvées : adapter `src/schedule/mapping.js`.
 
 ## Google Calendar
