@@ -123,12 +123,14 @@ describe('mapSeance', () => {
     );
 
     expect(seance).toMatchObject({
-      id: '1234567',
+      code: '1234567',
       codePersonne: '123',
       titre: 'Maths',
       matiere: 'Algèbre',
       module: 'Mathématiques',
-      salles: 'A101, B202',
+      salles: ['A101', 'B202'],
+      intervenants: [],
+      groupes: [],
     });
     expect(seance.debut.toISOString()).toBe('2026-10-05T06:30:00.000Z');
     expect(seance.fin.toISOString()).toBe('2026-10-05T08:00:00.000Z');
@@ -140,8 +142,51 @@ describe('mapSeance', () => {
       '123',
     );
 
-    expect(seance).toMatchObject({ titre: null, matiere: null, module: null, salles: null });
+    expect(seance).toMatchObject({
+      titre: null,
+      matiere: null,
+      module: null,
+      theme: null,
+      url: null,
+      allDay: false,
+      nightly: false,
+      salles: [],
+      intervenants: [],
+      groupes: [],
+    });
     expect(seance.debut.toISOString()).toBe('2026-12-01T08:00:00.000Z');
+  });
+
+  it('mappe intervenants et groupes, dédoublonne, ignore les sans-clé et exclut les e-mails', () => {
+    const seance = mapSeance(
+      {
+        code: '9',
+        start: '2026-10-05T08:30:00+02',
+        end: '2026-10-05T10:00:00+02',
+        theme: '',
+        url: '',
+        allDay: true,
+        salles: [{ nomSalle: 'A1' }, { nomSalle: 'A1' }, {}],
+        intervenants: [
+          { code: 'i1', nom: 'N', prenom: 'P', sousTitre: '', adresseMail: 'x@y.z', profils: [] },
+          { code: 'i1', nom: 'Autre' },
+          { nom: 'sans code' },
+        ],
+        participants: [
+          { codeGroupe: 'g1', libelleGroupe: 'G1', codeSession: 's1' },
+          { codeGroupe: 'g1', libelleGroupe: 'doublon' },
+          { libelleGroupe: 'sans clé' },
+        ],
+      },
+      '123',
+    );
+
+    expect(seance.salles).toEqual(['A1']);
+    expect(seance.intervenants).toEqual([{ code: 'i1', nom: 'N', prenom: 'P', sousTitre: null }]);
+    expect(seance.groupes).toEqual([{ code: 'g1', libelle: 'G1', codeSession: 's1' }]);
+    expect(seance).toMatchObject({ theme: null, url: null, allDay: true });
+    expect(JSON.stringify(seance)).not.toContain('x@y.z');
+    expect(seance).not.toHaveProperty('raw');
   });
 
   it('liste les clés trouvées (sans valeurs) quand des champs manquent', () => {

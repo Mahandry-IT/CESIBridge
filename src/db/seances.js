@@ -1,17 +1,68 @@
 import pg from 'pg';
-import { SCHEMA_SQL } from './schema.js';
+import { runMigrations } from './schema.js';
 
 export function createPool(databaseUrl) {
   return new pg.Pool({ connectionString: databaseUrl, max: 2 });
 }
 
 export async function applySchema(pool) {
-  await pool.query(SCHEMA_SQL);
+  await runMigrations(pool);
 }
+
+// Liaisons d'une séance : upsert des référentiels (intervenants, groupes) puis insertion multi-lignes via `unnest`.
+async function insertLinks(client, seance) {
+  const { code, salles, intervenants, groupes } = seance;
+  if (salles.length > 0) {
+    await client.query(
+      `INSERT INTO seance_salles (seance_code, nom_salle) SELECT $1, unnest($2::text[])`,
+      [code, salles],
+    );
+  }
+  if (intervenants.length > 0) {
+    await client.query(
+      `INSERT INTO intervenants (code, nom, prenom, sous_titre, updated_at)
+       SELECT t.*, now() FROM unnest($1::text[], $2::text[], $3::text[], $4::text[]) AS t
+       ON CONFLICT (code) DO UPDATE SET
+         nom = EXCLUDED.nom,
+         prenom = EXCLUDED.prenom,
+         sous_titre = EXCLUDED.sous_titre,
+         updated_at = EXCLUDED.updated_at`,
+      [
+        intervenants.map((i) => i.code),
+        intervenants.map((i) => i.nom),
+        intervenants.map((i) => i.prenom),
+        intervenants.map((i) => i.sousTitre),
+      ],
+    );
+    await client.query(
+      `INSERT INTO seance_intervenants (seance_code, intervenant_code)
+       SELECT $1, unnest($2::text[])`,
+      [code, intervenants.map((i) => i.code)],
+    );
+  }
+  if (groupes.length > 0) {
+    await client.query(
+      `INSERT INTO groupes (code, libelle, updated_at)
+       SELECT t.*, now() FROM unnest($1::text[], $2::text[]) AS t
+       ON CONFLICT (code) DO UPDATE SET
+         libelle = EXCLUDED.libelle,
+         updated_at = EXCLUDED.updated_at`,
+      [groupes.map((g) => g.code), groupes.map((g) => g.libelle)],
+    );
+    await client.query(
+      `INSERT INTO seance_groupes (seance_code, code_groupe, code_session)
+       SELECT $1, t.* FROM unnest($2::text[], $3::text[]) AS t`,
+      [code, groupes.map((g) => g.code), groupes.map((g) => g.codeSession)],
+    );
+  }
+}
+
+const LINK_TABLES = ['seance_salles', 'seance_intervenants', 'seance_groupes'];
 
 /**
  * Remplace les séances d'une personne sur une semaine (bornes `YYYY-MM-DD`, heure de Paris), en transaction :
- * les cours annulés ou déplacés disparaissent. Si un id existe déjà (déplacé dans une autre semaine), il est mis à jour.
+ * les cours annulés ou déplacés disparaissent (la cascade supprime leurs liaisons). Si un code existe déjà
+ * (séance déplacée depuis une autre semaine), la séance est mise à jour et ses liaisons sont recréées.
  */
 export async function replaceWeek(pool, codePersonne, range, seances) {
   const client = await pool.connect();
@@ -26,30 +77,40 @@ export async function replaceWeek(pool, codePersonne, range, seances) {
     );
     for (const seance of seances) {
       await client.query(
-        `INSERT INTO seances (id, code_personne, debut, fin, titre, matiere, module, salles, raw, synced_at)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
-         ON CONFLICT (id) DO UPDATE SET
+        `INSERT INTO seances
+           (code, code_personne, titre, matiere, module, theme, debut, fin, all_day, nightly, url, synced_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, now())
+         ON CONFLICT (code) DO UPDATE SET
            code_personne = EXCLUDED.code_personne,
-           debut = EXCLUDED.debut,
-           fin = EXCLUDED.fin,
            titre = EXCLUDED.titre,
            matiere = EXCLUDED.matiere,
            module = EXCLUDED.module,
-           salles = EXCLUDED.salles,
-           raw = EXCLUDED.raw,
+           theme = EXCLUDED.theme,
+           debut = EXCLUDED.debut,
+           fin = EXCLUDED.fin,
+           all_day = EXCLUDED.all_day,
+           nightly = EXCLUDED.nightly,
+           url = EXCLUDED.url,
            synced_at = EXCLUDED.synced_at`,
         [
-          seance.id,
+          seance.code,
           seance.codePersonne,
-          seance.debut,
-          seance.fin,
           seance.titre,
           seance.matiere,
           seance.module,
-          seance.salles,
-          JSON.stringify(seance.raw),
+          seance.theme,
+          seance.debut,
+          seance.fin,
+          seance.allDay,
+          seance.nightly,
+          seance.url,
         ],
       );
+      // Liaisons d'une séance déjà présente hors de la fenêtre : on repart de zéro.
+      for (const table of LINK_TABLES) {
+        await client.query(`DELETE FROM ${table} WHERE seance_code = $1`, [seance.code]);
+      }
+      await insertLinks(client, seance);
     }
     await client.query('COMMIT');
   } catch (error) {

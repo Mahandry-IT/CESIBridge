@@ -92,7 +92,7 @@ Login automatique (identifiants du `.env`) puis copie des N prochaines semaines 
 
 En headless dans Docker : `docker compose --profile sync run --rm sync`.
 
-Un seul essai de login par exécution (pas de boucle, pour éviter le verrouillage du compte). Le schéma (`seances`) est créé au démarrage. Si l'API renvoie un format de séance inattendu, l'erreur liste les clés trouvées : adapter `src/schedule/mapping.js`.
+Un seul essai de login par exécution (pas de boucle, pour éviter le verrouillage du compte). Le schéma est géré par des migrations versionnées (`src/db/schema.js`, table `schema_migrations`), appliquées au démarrage sous verrou : `seances`, `seance_salles`, `intervenants`, `seance_intervenants`, `groupes`, `seance_groupes` (relationnel, sans JSON ; les adresses e-mail des intervenants ne sont pas stockées). Si l'API renvoie un format de séance inattendu, l'erreur liste les clés trouvées : adapter `src/schedule/mapping.js`.
 
 ## Intégration Claude Desktop
 
