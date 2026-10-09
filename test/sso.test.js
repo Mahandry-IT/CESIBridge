@@ -12,6 +12,10 @@ describe('isLoggedInHost', () => {
     ['https://sso.example.fr/login?service=x', false],
     ['https://ent.example.fr.evil.com/', false],
     ['https://evil-ent.example.fr/', false],
+    ['https://ent.example.fr/identification/wayf', false],
+    ['https://ent.example.fr/identification/wayf/', false],
+    ['https://ent.example.fr/login/ClientIdpViaCesiFr', false],
+    ['https://ent.example.fr/loginfo', true],
     ['pas une url', false],
   ])('%s -> %s', (url, expected) => {
     expect(isLoggedInHost(url, hosts)).toBe(expected);

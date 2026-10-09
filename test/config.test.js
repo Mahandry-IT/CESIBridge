@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigError, loadConfig } from '../src/config.js';
+import { ConfigError, loadConfig, loadSyncConfig } from '../src/config.js';
 
 const validEnv = {
   CESI_ENT_URL: 'https://ent.example.fr/',
@@ -36,5 +36,75 @@ describe('loadConfig', () => {
     ['timeout négatif', { CESI_NAV_TIMEOUT_MS: '-1' }],
   ])('rejette : %s', (_label, override) => {
     expect(() => loadConfig({ ...validEnv, ...override })).toThrow(ConfigError);
+  });
+});
+
+describe('loadSyncConfig', () => {
+  const syncEnv = {
+    ...validEnv,
+    CESI_EMAIL: 'a.b@viacesi.fr',
+    CESI_PASSWORD: 's3cret',
+    CESI_CODE_PERSONNE: '12345',
+    DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  };
+
+  it('applique les défauts (4 semaines, navigateur visible)', () => {
+    const config = loadSyncConfig(syncEnv);
+
+    expect(config).toMatchObject({
+      codePersonne: '12345',
+      scheduleWeeks: 4,
+      headless: false,
+      databaseUrl: 'postgres://u:p@localhost:5432/db',
+    });
+    expect(config.credentials.email).toBe('a.b@viacesi.fr');
+    expect(config.credentials.password).toBe('s3cret');
+  });
+
+  it('accepte un code personne absent ou vide (découverte automatique)', () => {
+    expect(
+      loadSyncConfig({ ...syncEnv, CESI_CODE_PERSONNE: undefined }).codePersonne,
+    ).toBeUndefined();
+    expect(loadSyncConfig({ ...syncEnv, CESI_CODE_PERSONNE: '' }).codePersonne).toBeUndefined();
+  });
+
+  it('ne laisse pas fuiter le mot de passe en sérialisation', () => {
+    expect(JSON.stringify(loadSyncConfig(syncEnv))).not.toContain('s3cret');
+  });
+
+  it('liste les variables manquantes', () => {
+    let error;
+    try {
+      loadSyncConfig({ ...validEnv, CESI_PASSWORD: '' });
+    } catch (e) {
+      error = e;
+    }
+
+    expect(error).toBeInstanceOf(ConfigError);
+    expect(error.message).toMatch(/CESI_EMAIL[\s\S]*CESI_PASSWORD[\s\S]*DATABASE_URL/);
+  });
+
+  it.each([
+    ['0 semaine', { CESI_SCHEDULE_WEEKS: '0' }],
+    ['9 semaines', { CESI_SCHEDULE_WEEKS: '9' }],
+    ['semaines non entières', { CESI_SCHEDULE_WEEKS: '2.5' }],
+    ['code personne non numérique', { CESI_CODE_PERSONNE: 'abc' }],
+    ['CESI_HEADLESS inconnu', { CESI_HEADLESS: 'peut-être' }],
+    ['e-mail invalide', { CESI_EMAIL: 'pas-un-mail' }],
+  ])('rejette : %s', (_label, override) => {
+    expect(() => loadSyncConfig({ ...syncEnv, ...override })).toThrow(ConfigError);
+  });
+
+  it.each([
+    ['false', false],
+    ['true', true],
+    ['TRUE', true],
+  ])('parse CESI_HEADLESS=%s', (value, expected) => {
+    expect(loadSyncConfig({ ...syncEnv, CESI_HEADLESS: value }).headless).toBe(expected);
+  });
+
+  it('accepte les bornes 1 et 8', () => {
+    expect(loadSyncConfig({ ...syncEnv, CESI_SCHEDULE_WEEKS: '1' }).scheduleWeeks).toBe(1);
+    expect(loadSyncConfig({ ...syncEnv, CESI_SCHEDULE_WEEKS: '8' }).scheduleWeeks).toBe(8);
   });
 });
