@@ -1,15 +1,23 @@
 // Délai max pour laisser finir les redirections JS / auto-post SAML après l'événement `load`.
 const SETTLE_TIMEOUT_MS = 10_000;
 
+// Pages de login servies par l'ENT lui-même (wayf, retour SAML) : même hôte, mais pas connecté.
+const LOGIN_PATH_PREFIXES = ['/identification', '/login'];
+
 /**
- * Indique si l'URL est sur un hôte « connecté ».
+ * Indique si l'URL est sur un hôte « connecté », hors pages de login de l'ENT.
  * Une entrée `*.domaine.fr` accepte tous les sous-domaines (pas `domaine.fr` lui-même).
  */
 export function isLoggedInHost(url, loggedInHosts) {
   let host;
+  let path;
   try {
-    host = new URL(url).hostname.toLowerCase();
+    ({ hostname: host, pathname: path } = new URL(url));
+    host = host.toLowerCase();
   } catch {
+    return false;
+  }
+  if (LOGIN_PATH_PREFIXES.some((prefix) => path === prefix || path.startsWith(`${prefix}/`))) {
     return false;
   }
   return loggedInHosts.some((entry) =>
