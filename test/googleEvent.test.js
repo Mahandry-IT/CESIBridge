@@ -42,18 +42,23 @@ describe('toEvent', () => {
     expect(toEvent(seance())).toEqual({
       id: 'cesiabc123',
       status: 'confirmed',
-      summary: 'Algo',
+      summary: 'Tri',
       location: 'A1, B2',
-      description: 'Module : M1\nThème : Tri\nIntervenant(s) : DUPONT Jean\nGroupe(s) : Groupe 1',
+      description: 'Module : M1\nThème : Algo\nIntervenant(s) : DUPONT Jean\nGroupe(s) : Groupe 1',
       start: { dateTime: '2026-10-05T06:30:00.000Z', timeZone: 'Europe/Paris' },
       end: { dateTime: '2026-10-05T10:00:00.000Z', timeZone: 'Europe/Paris' },
       extendedProperties: { private: { source: 'cesibridge', code: 'abc123' } },
     });
   });
 
-  it('retombe sur le titre puis sur un libellé par défaut', () => {
-    expect(toEvent(seance({ matiere: null })).summary).toBe('Titre');
-    expect(toEvent(seance({ matiere: null, titre: null })).summary).toBe('Cours CESI');
+  it('retombe sur la matière, le titre puis un libellé par défaut', () => {
+    expect(toEvent(seance({ theme: null })).summary).toBe('Algo');
+    expect(toEvent(seance({ theme: null, matiere: null })).summary).toBe('Titre');
+    expect(toEvent(seance({ theme: null, matiere: null, titre: null })).summary).toBe('Cours CESI');
+  });
+
+  it('ne répète pas la matière quand elle sert de titre', () => {
+    expect(toEvent(seance({ theme: null })).description).not.toContain('Thème');
   });
 
   it('omet les lignes vides de la description', () => {
