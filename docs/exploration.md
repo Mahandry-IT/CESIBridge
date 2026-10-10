@@ -17,7 +17,8 @@ Résultats de la phase 1 (octobre 2026), base des outils CESIBridge de la phase 
 ### Accès
 
 - Le lien de l'ENT a un `href` **fixe** : `https://moodle.cesi.fr/login/index.php?authCAS=…`. On peut y aller directement, sans cliquer ni gérer le nouvel onglet.
-- La page Moodle affiche `#login` (e-mail), puis redirige vers `wayf.cesi.fr/login`, puis `sts.viacesi.fr/adfs/ls/`, puis `moodle.cesi.fr/`.
+- Ce lien SSO (`authCAS=CAS`) passe par `wayf.cesi.fr/login` (champ e-mail `input#login`), puis `sts.viacesi.fr/adfs/ls/`, puis `moodle.cesi.fr/`. Avec une session ENT valide, on arrive directement sur Moodle.
+- ⚠️ Ouvrir `https://moodle.cesi.fr/my/` sans session Moodle mène au formulaire de connexion **propre à Moodle**, où `#login` est un `<form>` et non le champ e-mail. Il ne faut pas le remplir : passer toujours par le lien SSO. `autoLogin` cible donc `input#login`.
 - **Reconnexion sans mot de passe** : si la session ADFS est encore valide (après le login ENT), ADFS ne redemande pas le mot de passe. `autoLogin` doit gérer ce cas : après `#login`, attendre soit `#passwordInput`, soit l'arrivée sur Moodle.
 - La page de connexion Moodle (`/login/index.php`) est déjà exclue des pages « connectées » (préfixe `/login`).
 

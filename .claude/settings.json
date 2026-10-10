@@ -1,6 +1,12 @@
 {
   "permissions": {
     "allow": [
+      "mcp__cesibridge__cesi_check_session",
+      "mcp__cesibridge__cesi_login",
+      "mcp__cesibridge__moodle_list_courses",
+      "mcp__cesibridge__moodle_upcoming_deadlines",
+      "mcp__cesibridge__moodle_get_course",
+      "mcp__cesibridge__scholarvox_get_toc",
       "mcp__playwright__browser_navigate",
       "mcp__playwright__browser_navigate_back",
       "mcp__playwright__browser_snapshot",
@@ -15,6 +21,7 @@
       "mcp__playwright__browser_close"
     ],
     "ask": [
+      "mcp__cesibridge__moodle_download_resource",
       "mcp__playwright__browser_click",
       "mcp__playwright__browser_type",
       "mcp__playwright__browser_fill_form",
