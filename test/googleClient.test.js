@@ -44,6 +44,17 @@ describe('listEvents', () => {
     expect(new URL(fetch.mock.calls[1][0]).searchParams.get('pageToken')).toBe('p2');
     expect(fetch.mock.calls[0][1].headers.authorization).toBe('Bearer TOKEN');
   });
+
+  it('filtre sur la source demandée', async () => {
+    const { client, fetch } = setup(json(200, { items: [] }));
+    await client.listEvents(
+      new Date('2026-10-04T22:00:00Z'),
+      new Date('2026-10-11T22:00:00Z'),
+      'cesibridge-exam',
+    );
+    const url = new URL(fetch.mock.calls[0][0]);
+    expect(url.searchParams.get('privateExtendedProperty')).toBe('source=cesibridge-exam');
+  });
 });
 
 describe('upsertEvent', () => {

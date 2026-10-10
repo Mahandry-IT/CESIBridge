@@ -68,6 +68,9 @@ services:
       CESI_HEADLESS: 'true'
       # Vide (donc ignoré) tant que Google n'est pas configuré dans .env.
       GOOGLE_SERVICE_ACCOUNT_KEY_FILE: ${GOOGLE_CALENDAR_ID:+/run/secrets/cesibridge/google-sa.json}
+      # Les variables CESI_FILIERE, CESI_NIVEAU, CESI_ANNEE et CESI_EXAM_REMINDER_DAYS et CESI_MAIL_* viennent de .env.
+      # Corrections des examens : dans le volume, comme la session et les téléchargements.
+      CESI_EXAM_CORRECTIONS_FILE: /data/exam-corrections.json
       DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
     depends_on:
       db:

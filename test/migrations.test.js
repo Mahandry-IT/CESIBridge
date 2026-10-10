@@ -21,15 +21,39 @@ function fakePool(applied = [], failOn = null) {
   return { versions, log, query: client.query, connect: async () => client };
 }
 
+describe('MIGRATIONS', () => {
+  it('déclare la version 3 : examens et sources, sans rien supprimer', () => {
+    const v3 = MIGRATIONS.find((m) => m.version === 3);
+
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4, 5]);
+    expect(v3.sql).toContain('CREATE TABLE examens (');
+    expect(v3.sql).toContain('CREATE TABLE examens_sources (');
+    expect(v3.sql).toContain('PRIMARY KEY (filiere, niveau, annee)');
+    expect(v3.sql).not.toMatch(/DROP/);
+  });
+});
+
+describe('migration 5', () => {
+  it('crée examens_rappels, clé (examen, seuil, jour) et sans clé étrangère', () => {
+    const v5 = MIGRATIONS.find((m) => m.version === 5);
+
+    expect(v5.sql).toContain('CREATE TABLE examens_rappels (');
+    expect(v5.sql).toContain('PRIMARY KEY (exam_id, jours, jour)');
+    expect(v5.sql).not.toMatch(/REFERENCES|DROP/);
+  });
+});
+
 describe('runMigrations', () => {
   it('applique les migrations dans l’ordre, chacune en transaction sous verrou', async () => {
     const pool = fakePool();
     await runMigrations(pool);
 
     expect([...pool.versions]).toEqual(MIGRATIONS.map((m) => m.version));
-    expect(pool.log.filter((l) => l === 'BEGIN')).toHaveLength(2);
-    expect(pool.log.filter((l) => l === 'COMMIT')).toHaveLength(2);
-    expect(pool.log.filter((l) => l === 'SELECT pg_advisory_xact_lock($1)')).toHaveLength(2);
+    expect(pool.log.filter((l) => l === 'BEGIN')).toHaveLength(MIGRATIONS.length);
+    expect(pool.log.filter((l) => l === 'COMMIT')).toHaveLength(MIGRATIONS.length);
+    expect(pool.log.filter((l) => l === 'SELECT pg_advisory_xact_lock($1)')).toHaveLength(
+      MIGRATIONS.length,
+    );
   });
 
   it('est idempotente : une 2e exécution ne rejoue rien', async () => {
@@ -46,8 +70,8 @@ describe('runMigrations', () => {
     const pool = fakePool([1]);
     await runMigrations(pool);
 
-    expect([...pool.versions].sort()).toEqual([1, 2]);
-    expect(pool.log.filter((l) => l.startsWith('INSERT'))).toHaveLength(1);
+    expect([...pool.versions].sort()).toEqual([1, 2, 3, 4, 5]);
+    expect(pool.log.filter((l) => l.startsWith('INSERT'))).toHaveLength(MIGRATIONS.length - 1);
   });
 
   it('annule la transaction et propage l’erreur si une migration échoue', async () => {

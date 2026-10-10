@@ -137,19 +137,8 @@ async function writeBody(response, path, handle, maxBytes) {
   }
 }
 
-/**
- * Télécharge une ressource Moodle dans `dir` (cookies du contexte transmis en en-tête).
- * Refuse les pages HTML, applique la taille maximale (Content-Length puis compteur en flux),
- * n'écrase jamais un fichier existant.
- * @returns {Promise<{ path: string, size: number, contentType: string|null }>}
- */
-export async function downloadResource({
-  url,
-  cookieHeader,
-  dir,
-  maxBytes,
-  fetch: fetchFn = globalThis.fetch,
-}) {
+// Requête validée jusqu'aux en-têtes : hôte, redirections, statut, refus du HTML, Content-Length.
+async function requestResource({ url, cookieHeader, maxBytes, fetchFn }) {
   const start = validateDownloadUrl(url);
   const signal = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
   const { response, finalUrl } = await fetchFollowingMoodle(fetchFn, start, cookieHeader, signal);
@@ -168,10 +157,76 @@ export async function downloadResource({
     await discard();
     throw new DownloadError(`fichier trop volumineux (max ${maxBytes} octets)`);
   }
+  return { response, finalUrl, contentType, discard };
+}
+
+function mimeType(contentType) {
+  return contentType?.split(';')[0].trim() || null;
+}
+
+/**
+ * Télécharge une ressource Moodle dans `dir` (cookies du contexte transmis en en-tête).
+ * Refuse les pages HTML, applique la taille maximale (Content-Length puis compteur en flux),
+ * n'écrase jamais un fichier existant.
+ * @returns {Promise<{ path: string, size: number, contentType: string|null }>}
+ */
+export async function downloadResource({
+  url,
+  cookieHeader,
+  dir,
+  maxBytes,
+  fetch: fetchFn = globalThis.fetch,
+}) {
+  const { response, finalUrl, contentType } = await requestResource({
+    url,
+    cookieHeader,
+    maxBytes,
+    fetchFn,
+  });
   const target = resolve(dir);
   await mkdir(target, { recursive: true, mode: 0o700 });
   const filename = filenameFrom(response.headers.get('content-disposition'), finalUrl);
   const { path, handle } = await createUniqueFile(target, filename);
   const size = await writeBody(response, path, handle, maxBytes);
-  return { path, size, contentType: contentType?.split(';')[0].trim() || null };
+  return { path, size, contentType: mimeType(contentType) };
+}
+
+/**
+ * Télécharge une ressource Moodle en mémoire, avec les mêmes contrôles que `downloadResource`.
+ * `accept(mime)` doit renvoyer vrai pour le type MIME reçu (sans paramètres), sinon `DownloadError`.
+ * @returns {Promise<{ bytes: Buffer, contentType: string }>}
+ */
+export async function fetchResourceBytes({
+  url,
+  cookieHeader,
+  maxBytes,
+  fetch: fetchFn = globalThis.fetch,
+  accept,
+}) {
+  const { response, contentType, discard } = await requestResource({
+    url,
+    cookieHeader,
+    maxBytes,
+    fetchFn,
+  });
+  const mime = mimeType(contentType);
+  if (!mime || !accept(mime)) {
+    await discard();
+    throw new DownloadError(`type de fichier refusé : ${mime ?? 'inconnu'}`);
+  }
+  const chunks = [];
+  let size = 0;
+  try {
+    for await (const chunk of response.body ?? []) {
+      size += chunk.byteLength;
+      if (size > maxBytes)
+        throw new DownloadError(`fichier trop volumineux (max ${maxBytes} octets)`);
+      chunks.push(chunk);
+    }
+  } catch (error) {
+    await discard();
+    if (error instanceof DownloadError) throw error;
+    throw new DownloadError('téléchargement interrompu');
+  }
+  return { bytes: Buffer.concat(chunks), contentType: mime };
 }

@@ -9,7 +9,7 @@ const DEFAULT_SUMMARY = 'Cours CESI';
 const BASE32HEX = '0123456789abcdefghijklmnopqrstuv';
 const VALID_ID_BODY = /^[a-v0-9]+$/;
 
-function base32hex(text) {
+export function base32hex(text) {
   let bits = 0;
   let value = 0;
   let out = '';
@@ -87,7 +87,7 @@ const instantOf = (when) => {
 };
 
 // Uniquement les champs gérés par CESIBridge ; les autres (rappels, couleur…) ne déclenchent pas de mise à jour.
-function managed(event) {
+export function managed(event) {
   const priv = event.extendedProperties?.private ?? {};
   return JSON.stringify([
     event.status ?? 'confirmed',
@@ -101,8 +101,15 @@ function managed(event) {
   ]);
 }
 
-/** Compare les événements voulus et existants (par `id`) : `{ toCreate, toUpdate, toDelete }`. */
-export function diffEvents(desired, existing) {
+/**
+ * Compare les événements voulus et existants (par `id`) : `{ toCreate, toUpdate, toDelete }`.
+ * `source` borne les suppressions aux événements de ce flux ; `same` décide si deux versions sont équivalentes.
+ */
+export function diffEvents(
+  desired,
+  existing,
+  { source = SOURCE, same = (a, b) => managed(a) === managed(b) } = {},
+) {
   const current = new Map(existing.map((event) => [event.id, event]));
   const wanted = new Set(desired.map((event) => event.id));
   const toCreate = [];
@@ -110,12 +117,12 @@ export function diffEvents(desired, existing) {
   for (const event of desired) {
     const found = current.get(event.id);
     if (!found) toCreate.push(event);
-    else if (managed(found) !== managed(event)) toUpdate.push(event);
+    else if (!same(found, event)) toUpdate.push(event);
   }
   // Double garde en plus du filtre `privateExtendedProperty` : jamais un événement non créé par nous.
   const toDelete = existing
     .filter(
-      (event) => event.extendedProperties?.private?.source === SOURCE && !wanted.has(event.id),
+      (event) => event.extendedProperties?.private?.source === source && !wanted.has(event.id),
     )
     .map((event) => event.id);
   return { toCreate, toUpdate, toDelete };

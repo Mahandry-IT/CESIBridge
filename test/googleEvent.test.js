@@ -112,6 +112,17 @@ describe('diffEvents', () => {
     expect(diffEvents([], [personal, foreign]).toDelete).toEqual([]);
   });
 
+  it('ne supprime pas un événement d’examen par défaut', () => {
+    const exam = {
+      id: 'cesiepreuve1',
+      extendedProperties: { private: { source: 'cesibridge-exam' } },
+    };
+    expect(diffEvents([], [exam]).toDelete).toEqual([]);
+    expect(diffEvents([], [exam], { source: 'cesibridge-exam' }).toDelete).toEqual([
+      'cesiepreuve1',
+    ]);
+  });
+
   it('traite un lieu absent comme un lieu vide', () => {
     const noLocation = toEvent(seance({ salles: [] }));
     const fromGoogle = { ...noLocation };
