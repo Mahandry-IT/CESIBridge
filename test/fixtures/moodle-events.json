@@ -1,0 +1,32 @@
+{
+  "events": [
+    {
+      "id": 9002,
+      "name": "Quiz 1 est à effectuer",
+      "activityname": "Quiz 1",
+      "modulename": "quiz",
+      "timesort": 1760392800,
+      "overdue": false,
+      "url": "https://moodle.cesi.fr/mod/quiz/view.php?id=5002",
+      "course": { "id": 101, "fullname": "Algorithmique avancée" }
+    },
+    {
+      "id": 9001,
+      "name": "Rendu TP est dû",
+      "activityname": "Rendu TP",
+      "modulename": "assign",
+      "timesort": 1759960800,
+      "overdue": true,
+      "url": "https://moodle.cesi.fr/mod/assign/view.php?id=5001",
+      "course": { "id": 101, "fullname": "Algorithmique avancée" }
+    },
+    {
+      "id": 9003,
+      "name": "Événement sans activité",
+      "timesort": 1760997600,
+      "url": "javascript:alert(1)"
+    }
+  ],
+  "firstid": 9001,
+  "lastid": 9003
+}

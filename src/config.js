@@ -4,6 +4,11 @@ const DEFAULT_STATE_PATH = './data/state.json';
 const DEFAULT_NAV_TIMEOUT_MS = 30_000;
 const DEFAULT_LOGIN_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_SCHEDULE_WEEKS = 4;
+const DEFAULT_DOWNLOAD_DIR = './data/downloads';
+const DEFAULT_DOWNLOAD_MAX_MB = 50;
+const MAX_DOWNLOAD_MAX_MB = 500;
+const BYTES_PER_MB = 1024 * 1024;
+const MOODLE_HOST = 'moodle.cesi.fr';
 
 const hostList = z
   .string()
@@ -47,6 +52,18 @@ const googleShape = {
   ),
 };
 
+// Lien d'accès Moodle (passe par le SSO) : https sur l'hôte Moodle uniquement.
+const moodleUrlField = z.preprocess(
+  emptyToUndefined,
+  z
+    .url({ protocol: /^https$/ })
+    .refine(
+      (value) => new URL(value).hostname === MOODLE_HOST,
+      `URL https://${MOODLE_HOST}/… attendue`,
+    )
+    .optional(),
+);
+
 const baseShape = {
   CESI_ENT_URL: z.url({ protocol: /^https?$/ }),
   CESI_LOGGED_IN_HOSTS: hostList,
@@ -55,7 +72,23 @@ const baseShape = {
   CESI_LOGIN_TIMEOUT_MS: timeout(DEFAULT_LOGIN_TIMEOUT_MS),
 };
 
-const schema = z.object(baseShape);
+// Serveur MCP : identifiants facultatifs (reconnexion automatique), mais ensemble.
+const schema = z.object({
+  ...baseShape,
+  CESI_EMAIL: z.preprocess(emptyToUndefined, z.email().optional()),
+  CESI_PASSWORD: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  CESI_MOODLE_URL: moodleUrlField,
+  CESI_DOWNLOAD_DIR: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).default(DEFAULT_DOWNLOAD_DIR),
+  ),
+  CESI_DOWNLOAD_MAX_MB: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(MAX_DOWNLOAD_MAX_MB)
+    .default(DEFAULT_DOWNLOAD_MAX_MB),
+});
 
 // Variables requises uniquement par la synchronisation (login auto + base), pas par le serveur MCP.
 const syncSchema = z.object({
@@ -118,18 +151,40 @@ function googleConfig(parsed) {
   return Object.freeze({ calendarId, keyFile });
 }
 
+// Le mot de passe est non énumérable : absent de JSON.stringify, console.log et spread.
+function makeCredentials(email, password) {
+  const credentials = { email };
+  Object.defineProperty(credentials, 'password', { value: password });
+  return Object.freeze(credentials);
+}
+
+function optionalCredentials(parsed) {
+  const { CESI_EMAIL: email, CESI_PASSWORD: password } = parsed;
+  if (email === undefined && password === undefined) return null;
+  if (email === undefined || password === undefined) {
+    throw new ConfigError(
+      'Configuration invalide :\n  - CESI_EMAIL et CESI_PASSWORD doivent être définies ensemble',
+    );
+  }
+  return makeCredentials(email, password);
+}
+
 export function loadConfig(env = process.env) {
-  return Object.freeze(baseConfig(parseEnv(schema, env)));
+  const parsed = parseEnv(schema, env);
+  return Object.freeze({
+    ...baseConfig(parsed),
+    credentials: optionalCredentials(parsed),
+    moodleUrl: parsed.CESI_MOODLE_URL ?? null,
+    downloadDir: parsed.CESI_DOWNLOAD_DIR,
+    downloadMaxBytes: parsed.CESI_DOWNLOAD_MAX_MB * BYTES_PER_MB,
+  });
 }
 
 export function loadSyncConfig(env = process.env) {
   const parsed = parseEnv(syncSchema, env);
-  // Le mot de passe est non énumérable : absent de JSON.stringify, console.log et spread.
-  const credentials = { email: parsed.CESI_EMAIL };
-  Object.defineProperty(credentials, 'password', { value: parsed.CESI_PASSWORD });
   return Object.freeze({
     ...baseConfig(parsed),
-    credentials: Object.freeze(credentials),
+    credentials: makeCredentials(parsed.CESI_EMAIL, parsed.CESI_PASSWORD),
     codePersonne: parsed.CESI_CODE_PERSONNE,
     scheduleWeeks: parsed.CESI_SCHEDULE_WEEKS,
     headless: parsed.CESI_HEADLESS,

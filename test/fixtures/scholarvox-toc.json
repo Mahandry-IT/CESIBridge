@@ -1,0 +1,10 @@
+[
+  { "item": 1, "name": "Couverture", "page": 1, "level": "0" },
+  { "item": 2, "name": "Chapitre 1 - Introduction", "page": 9, "level": "0" },
+  { "item": 3, "name": "1.1 Notions de base", "page": "11", "level": "1" },
+  { "item": 4, "name": "1.1.1 Détail", "page": 12, "level": 2 },
+  { "item": 5, "name": "", "page": 13, "level": "1" },
+  { "item": 6, "name": "Niveau invalide", "page": 14, "level": "x" },
+  { "item": 7, "name": "Sans page", "level": "0" },
+  "pas un objet"
+]

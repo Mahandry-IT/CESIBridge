@@ -3,8 +3,12 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { loadConfig } from './config.js';
 import { createBrowserProvider, launchBrowser } from './browser/session.js';
+import { createSessionManager } from './browser/sessionManager.js';
+import { createMoodleService } from './moodle/service.js';
 import { registerCheckSession } from './tools/checkSession.js';
 import { registerLogin } from './tools/login.js';
+import { registerMoodleTools } from './tools/moodle.js';
+import { registerScholarvoxTools } from './tools/scholarvox.js';
 import { log } from './log.js';
 
 const { version } = createRequire(import.meta.url)('../package.json');
@@ -20,8 +24,13 @@ async function main() {
 
   const browsers = createBrowserProvider(() => launchBrowser({ headless: true }));
   const server = new McpServer({ name: 'cesibridge', version });
-  registerCheckSession(server, { config, getBrowser: () => browsers.get() });
+  const getBrowser = () => browsers.get();
+  // Sans CESI_EMAIL/CESI_PASSWORD, pas de reconnexion automatique : les outils renvoient la procédure cesi_login.
+  const sessions = createSessionManager({ getBrowser, config, credentials: config.credentials });
+  registerCheckSession(server, { config, getBrowser });
   registerLogin(server);
+  registerMoodleTools(server, { moodle: createMoodleService({ sessions, config }) });
+  registerScholarvoxTools(server);
 
   let closing = false;
   const shutdown = async (reason) => {

@@ -16,6 +16,41 @@ describe('loadConfig', () => {
       statePath: './data/state.json',
       navTimeoutMs: 30_000,
       loginTimeoutMs: 300_000,
+      credentials: null,
+      moodleUrl: null,
+      downloadDir: './data/downloads',
+      downloadMaxBytes: 50 * 1024 * 1024,
+    });
+  });
+
+  it('lit les identifiants facultatifs, mot de passe non sérialisé', () => {
+    const config = loadConfig({
+      ...validEnv,
+      CESI_EMAIL: 'a.b@viacesi.fr',
+      CESI_PASSWORD: 's3cret',
+    });
+
+    expect(config.credentials.email).toBe('a.b@viacesi.fr');
+    expect(config.credentials.password).toBe('s3cret');
+    expect(JSON.stringify(config)).not.toContain('s3cret');
+  });
+
+  it('identifiants vides = absents', () => {
+    expect(loadConfig({ ...validEnv, CESI_EMAIL: '', CESI_PASSWORD: '' }).credentials).toBeNull();
+  });
+
+  it('lit Moodle et les téléchargements', () => {
+    const config = loadConfig({
+      ...validEnv,
+      CESI_MOODLE_URL: 'https://moodle.cesi.fr/login/index.php?authCAS=CAS',
+      CESI_DOWNLOAD_DIR: '/tmp/dl',
+      CESI_DOWNLOAD_MAX_MB: '10',
+    });
+
+    expect(config).toMatchObject({
+      moodleUrl: 'https://moodle.cesi.fr/login/index.php?authCAS=CAS',
+      downloadDir: '/tmp/dl',
+      downloadMaxBytes: 10 * 1024 * 1024,
     });
   });
 
@@ -34,6 +69,12 @@ describe('loadConfig', () => {
     ['URL non http', { CESI_ENT_URL: 'ftp://ent.example.fr' }],
     ['liste d’hôtes vide', { CESI_LOGGED_IN_HOSTS: ' , ' }],
     ['timeout négatif', { CESI_NAV_TIMEOUT_MS: '-1' }],
+    ['e-mail sans mot de passe', { CESI_EMAIL: 'a.b@viacesi.fr' }],
+    ['mot de passe sans e-mail', { CESI_PASSWORD: 's3cret' }],
+    ['Moodle hors domaine', { CESI_MOODLE_URL: 'https://moodle.example.com/' }],
+    ['Moodle en http', { CESI_MOODLE_URL: 'http://moodle.cesi.fr/' }],
+    ['taille de téléchargement nulle', { CESI_DOWNLOAD_MAX_MB: '0' }],
+    ['taille de téléchargement trop grande', { CESI_DOWNLOAD_MAX_MB: '501' }],
   ])('rejette : %s', (_label, override) => {
     expect(() => loadConfig({ ...validEnv, ...override })).toThrow(ConfigError);
   });
