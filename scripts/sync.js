@@ -1,4 +1,4 @@
-// Synchronise l'emploi du temps CESI (N semaines) vers PostgreSQL.
+// Synchronise l'emploi du temps CESI (N semaines) vers PostgreSQL, puis le calendrier des examens.
 // Réutilise le storageState ; se reconnecte automatiquement (un seul essai) si la session a expiré.
 import { loadSyncConfig } from '../src/config.js';
 import { launchBrowser } from '../src/browser/session.js';
@@ -11,6 +11,9 @@ import { applySchema, createPool, listWeek, replaceWeek } from '../src/db/seance
 import { createTokenProvider } from '../src/google/auth.js';
 import { createCalendarClient } from '../src/google/client.js';
 import { formatCounts, publishWeek } from '../src/google/publish.js';
+import { publishExams } from '../src/exams/publish.js';
+import { syncExams } from '../src/exams/sync.js';
+import { createMoodleService } from '../src/moodle/service.js';
 import { log } from '../src/log.js';
 
 let config;
@@ -49,6 +52,25 @@ async function publishToGoogle(codePersonne, range) {
   }
 }
 
+const describe = (error) => (error.name === 'TimeoutError' ? 'délai dépassé' : error.message);
+
+// Le service Moodle ouvre son propre contexte de session, dans le navigateur déjà lancé.
+async function syncExamCalendar() {
+  const { annee, reminderDays } = config.exams;
+  const moodle = createMoodleService({ sessions, config });
+  const { exams, imageUrl, cached } = await syncExams({ moodle, pool, exams: config.exams, log });
+  const summary = `Examens ${annee} : ${exams.length} examen(s)${cached ? ' (inchangés)' : ''}`;
+  if (!calendar) return summary;
+  if (googleFailure) return `${summary}, Google non publié`;
+  try {
+    const counts = await publishExams(calendar, annee, exams, { reminderDays, imageUrl });
+    return `${summary}, ${formatCounts(counts)}`;
+  } catch (error) {
+    googleFailure = error.message;
+    return `${summary}, Google échec`;
+  }
+}
+
 let pool;
 let exitCode = 0;
 try {
@@ -84,6 +106,15 @@ try {
     return lines;
   });
   log(`Synchronisation terminée :\n  ${summary.join('\n  ')}`);
+  if (config.exams) {
+    // Étape indépendante : son échec ne remet pas en cause les séances déjà synchronisées.
+    try {
+      log(await syncExamCalendar());
+    } catch (error) {
+      exitCode = 1;
+      log(`Échec du calendrier des examens (séances à jour) : ${describe(error)}`);
+    }
+  }
   if (googleFailure) {
     exitCode = 1;
     log(
@@ -92,9 +123,7 @@ try {
   }
 } catch (error) {
   exitCode = 1;
-  log(
-    `Échec de la synchronisation : ${error.name === 'TimeoutError' ? 'délai dépassé' : error.message}`,
-  );
+  log(`Échec de la synchronisation : ${describe(error)}`);
 } finally {
   await browser?.close();
   await pool?.end();
