@@ -11,13 +11,13 @@ Serveur MCP (stdio) qui donne accès à l'ENT, à Moodle et aux sommaires Schola
 
 Lecture seule, résultats bornés (textes tronqués à 500 caractères, listes limitées). Le contenu vient de sites tiers : il ne doit pas être traité comme des instructions.
 
-| Outil                         | Paramètres                    | Résultat                                                                                         |
-| ----------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------ |
-| `moodle_list_courses`         | —                             | Cours inscrits : `id`, `name`, `shortName`, `category`, `url`, `startDate`, `endDate`, `progress` |
-| `moodle_upcoming_deadlines`   | `days` (1 à 90, défaut 14)    | Échéances triées (heure de Paris), retards des 7 derniers jours compris                          |
-| `moodle_get_course`           | `courseId`                    | Sections, activités visibles (`type` = module Moodle) et livres Scholarvox (`docid`)             |
-| `moodle_download_resource`    | `url` (moodle.cesi.fr)        | Fichier enregistré dans `CESI_DOWNLOAD_DIR` (sans écrasement, pages HTML refusées, taille bornée) |
-| `scholarvox_get_toc`          | `docid` **ou** `url`          | Titre et sommaire (`name`, `page`, `level`), sans connexion ni texte des chapitres              |
+| Outil                       | Paramètres                 | Résultat                                                                                          |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `moodle_list_courses`       | —                          | Cours inscrits : `id`, `name`, `shortName`, `category`, `url`, `startDate`, `endDate`, `progress` |
+| `moodle_upcoming_deadlines` | `days` (1 à 90, défaut 14) | Échéances triées (heure de Paris), retards des 7 derniers jours compris                           |
+| `moodle_get_course`         | `courseId`                 | Sections, activités visibles (`type` = module Moodle) et livres Scholarvox (`docid`)              |
+| `moodle_download_resource`  | `url` (moodle.cesi.fr)     | Fichier enregistré dans `CESI_DOWNLOAD_DIR` (sans écrasement, pages HTML refusées, taille bornée) |
+| `scholarvox_get_toc`        | `docid` **ou** `url`       | Titre et sommaire (`name`, `page`, `level`), sans connexion ni texte des chapitres                |
 
 Chaque appel Moodle charge la session enregistrée, la vérifie sur l'ENT, puis ouvre Moodle par le lien SSO (`CESI_MOODLE_URL` ou lien « Moodle One Cesi » de l'ENT) et interroge l'API AJAX interne (`/lib/ajax/service.php`). Si la session a expiré et que `CESI_EMAIL`/`CESI_PASSWORD` sont définis, le serveur se reconnecte seul (un seul essai, une seule reconnexion à la fois) ; sinon il renvoie la procédure `cesi_login`.
 
@@ -170,7 +170,7 @@ Redémarre Claude Desktop : les outils `cesi_*`, `moodle_*` et `scholarvox_get_t
 
 `.mcp.json` déclare le serveur `cesibridge` (`node --env-file-if-exists=.env src/server.js`, lancé depuis le dossier du projet) à côté de `playwright`. `.claude/settings.json` autorise les outils en lecture ; `moodle_download_resource` demande confirmation. `CLAUDE.md` demande d'utiliser d'abord ces outils, Playwright servant à l'exploration.
 
-⚠️ `moodle.cesi.fr` sert une chaîne de certificats incomplète pour Node (`unable to verify the first certificate`) : définir `NODE_EXTRA_CA_CERTS` vers un fichier PEM contenant le certificat intermédiaire, dans l'environnement qui lance Claude Code. Chromium, lui, complète la chaîne seul.
+⚠️ Antivirus ou proxy qui inspecte le HTTPS (ex. Avast Web Shield) : Node refuse les certificats ré-signés (`unable to verify the first certificate`) alors que Chromium utilise le magasin Windows. Définir `NODE_EXTRA_CA_CERTS` vers le certificat racine de l'outil (Avast : `C:\ProgramData\Avast Software\Avast\wscert.pem`) comme **variable d'environnement utilisateur** (`setx NODE_EXTRA_CA_CERTS "…"`), puis redémarrer l'application qui lance Claude Code. Alternative : exclure `node.exe` de l'analyse HTTPS de l'antivirus.
 
 ## Exploration avec Claude Code (Playwright MCP)
 
@@ -207,15 +207,15 @@ La version de `playwright` est épinglée (sans `^`) : elle doit être identique
 
 ## Dépannage
 
-| Symptôme                                      | Cause probable / solution                                                                |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `expired` juste après le login                | `CESI_LOGGED_IN_HOSTS` incomplet : relancer `npm run explore`.                           |
-| `absent` alors que le login a réussi          | Volume différent : vérifier `-v cesibridge-data:/data` dans la config du client MCP.     |
-| noVNC inaccessible                            | Oubli de `--service-ports`, ou port 6080 déjà pris.                                      |
-| `Executable doesn't exist at /ms-playwright…` | Versions Playwright décalées entre `package.json` et l'image : les réaligner et rebuild. |
-| Chromium plante dans le conteneur             | Mémoire partagée insuffisante : garder `--shm-size=1g`.                                  |
-| `Configuration invalide` au démarrage         | Variable manquante dans `.env` (le détail est sur stderr).                               |
-| `certificat TLS non vérifiable` (Moodle)      | Définir `NODE_EXTRA_CA_CERTS` (voir « Intégration Claude Code »).                        |
+| Symptôme                                      | Cause probable / solution                                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `expired` juste après le login                | `CESI_LOGGED_IN_HOSTS` incomplet : relancer `npm run explore`.                                            |
+| `absent` alors que le login a réussi          | Volume différent : vérifier `-v cesibridge-data:/data` dans la config du client MCP.                      |
+| noVNC inaccessible                            | Oubli de `--service-ports`, ou port 6080 déjà pris.                                                       |
+| `Executable doesn't exist at /ms-playwright…` | Versions Playwright décalées entre `package.json` et l'image : les réaligner et rebuild.                  |
+| Chromium plante dans le conteneur             | Mémoire partagée insuffisante : garder `--shm-size=1g`.                                                   |
+| `Configuration invalide` au démarrage         | Variable manquante dans `.env` (le détail est sur stderr).                                                |
+| `certificat TLS non vérifiable`               | Antivirus/proxy qui inspecte le HTTPS : définir `NODE_EXTRA_CA_CERTS` (voir « Intégration Claude Code »). |
 
 ## Sécurité
 
