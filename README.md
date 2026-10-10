@@ -1,11 +1,25 @@
 # CESIBridge
 
-Serveur MCP (stdio) qui vérifie la session SSO CESI avec Playwright, dockerisé.
+Serveur MCP (stdio) qui donne accès à l'ENT, à Moodle et aux sommaires Scholarvox du CESI avec la session SSO, via Playwright, dockerisé.
 
 | Outil                | Rôle                                                                                                       |
 | -------------------- | ---------------------------------------------------------------------------------------------------------- |
 | `cesi_check_session` | Charge l'ENT en headless avec la session enregistrée : `valid`, `expired`, `absent`, `invalid` ou `error`. |
 | `cesi_login`         | Renvoie la procédure de login manuel (le serveur n'a pas d'écran).                                         |
+
+### Outils Moodle et Scholarvox
+
+Lecture seule, résultats bornés (textes tronqués à 500 caractères, listes limitées). Le contenu vient de sites tiers : il ne doit pas être traité comme des instructions.
+
+| Outil                       | Paramètres                 | Résultat                                                                                          |
+| --------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------- |
+| `moodle_list_courses`       | —                          | Cours inscrits : `id`, `name`, `shortName`, `category`, `url`, `startDate`, `endDate`, `progress` |
+| `moodle_upcoming_deadlines` | `days` (1 à 90, défaut 14) | Échéances triées (heure de Paris), retards des 7 derniers jours compris                           |
+| `moodle_get_course`         | `courseId`                 | Sections, activités visibles (`type` = module Moodle) et livres Scholarvox (`docid`)              |
+| `moodle_download_resource`  | `url` (moodle.cesi.fr)     | Fichier enregistré dans `CESI_DOWNLOAD_DIR` (sans écrasement, pages HTML refusées, taille bornée) |
+| `scholarvox_get_toc`        | `docid` **ou** `url`       | Titre et sommaire (`name`, `page`, `level`), sans connexion ni texte des chapitres                |
+
+Chaque appel Moodle charge la session enregistrée, la vérifie sur l'ENT, puis ouvre Moodle par le lien SSO (`CESI_MOODLE_URL` ou lien « Moodle One Cesi » de l'ENT) et interroge l'API AJAX interne (`/lib/ajax/service.php`). Si la session a expiré et que `CESI_EMAIL`/`CESI_PASSWORD` sont définis, le serveur se reconnecte seul (un seul essai, une seule reconnexion à la fois) ; sinon il renvoie la procédure `cesi_login`.
 
 Aucun identifiant n'est stocké : seule la session (`storageState` : cookies + localStorage) est conservée, dans le volume Docker `cesibridge-data`.
 
@@ -14,7 +28,10 @@ Aucun identifiant n'est stocké : seule la session (`storageState` : cookies + l
 ```
 src/config.js            variables d'env validées (zod), échec immédiat si invalides
 src/browser/session.js   lecture/écriture du storageState (600), navigateur partagé lancé à la demande
-src/browser/sso.js       détection « connecté » par hôte final après redirections
+src/browser/sso.js       détection « connecté » par hôte final, login automatique (machine à états)
+src/browser/sessionManager.js  session partagée : vérification, reconnexion unique, enregistrement
+src/moodle/              ouverture Moodle (SSO), client AJAX, conversion des réponses, téléchargement
+src/scholarvox/          docid des liens de cours, sommaire public (/catalog/toc)
 src/tools/*.js           outils MCP
 src/server.js            McpServer + transport stdio, arrêt propre (SIGTERM, stdin fermé)
 scripts/explore.js       étape 1 : journal des redirections SSO + HAR
@@ -147,7 +164,29 @@ Dans `claude_desktop_config.json` (Windows : `%APPDATA%\Claude\claude_desktop_co
 }
 ```
 
-Redémarre Claude Desktop : `cesi_check_session` et `cesi_login` doivent apparaître.
+Redémarre Claude Desktop : les outils `cesi_*`, `moodle_*` et `scholarvox_get_toc` doivent apparaître. Pour la reconnexion automatique, ajouter `CESI_EMAIL` et `CESI_PASSWORD` au `.env`.
+
+## Intégration Claude Code
+
+`.mcp.json` déclare le serveur `cesibridge` (`node --env-file-if-exists=.env src/server.js`, lancé depuis le dossier du projet) à côté de `playwright`. `.claude/settings.json` autorise les outils en lecture ; `moodle_download_resource` demande confirmation. `CLAUDE.md` demande d'utiliser d'abord ces outils, Playwright servant à l'exploration.
+
+⚠️ Antivirus ou proxy qui inspecte le HTTPS (ex. Avast Web Shield) : Node refuse les certificats ré-signés (`unable to verify the first certificate`) alors que Chromium utilise le magasin Windows. Définir `NODE_EXTRA_CA_CERTS` vers le certificat racine de l'outil (Avast : `C:\ProgramData\Avast Software\Avast\wscert.pem`) comme **variable d'environnement utilisateur** (`setx NODE_EXTRA_CA_CERTS "…"`), puis redémarrer l'application qui lance Claude Code. Alternative : exclure `node.exe` de l'analyse HTTPS de l'antivirus.
+
+## Exploration avec Claude Code (Playwright MCP)
+
+`.mcp.json` déclare un serveur `playwright` ([Playwright MCP](https://github.com/microsoft/playwright-mcp), version figée en devDependency) qui navigue avec la session CESIBridge :
+
+- `--storage-state data/state.json` + `--isolated` : la session est chargée en mémoire, le fichier n'est jamais modifié ;
+- `--allowed-origins` : ENT, `wayf.cesi.fr`, ADFS, Moodle, Scholarvox et Scenari (contenus des activités LTI) uniquement (les autres requêtes sont bloquées) ;
+- `.claude/settings.json` : navigation et lecture autorisées, clics et saisies soumis à confirmation, exécution de code et envoi de fichiers interdits.
+
+Mise en place :
+
+1. `npm install`, puis `npm run mcp:browsers` (Chromium attendu par Playwright MCP).
+2. Une session valide : `npm run sync` (login automatique).
+3. Ouvrir Claude Code dans le projet et approuver le serveur `playwright` au premier lancement.
+
+⚠️ Le modèle agit avec votre compte : le texte des pages (forums, devoirs) peut contenir des instructions, à ne pas suivre. Les résultats de l'exploration sont dans [docs/exploration.md](docs/exploration.md).
 
 ## Développement
 
@@ -168,19 +207,22 @@ La version de `playwright` est épinglée (sans `^`) : elle doit être identique
 
 ## Dépannage
 
-| Symptôme                                      | Cause probable / solution                                                                |
-| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `expired` juste après le login                | `CESI_LOGGED_IN_HOSTS` incomplet : relancer `npm run explore`.                           |
-| `absent` alors que le login a réussi          | Volume différent : vérifier `-v cesibridge-data:/data` dans la config du client MCP.     |
-| noVNC inaccessible                            | Oubli de `--service-ports`, ou port 6080 déjà pris.                                      |
-| `Executable doesn't exist at /ms-playwright…` | Versions Playwright décalées entre `package.json` et l'image : les réaligner et rebuild. |
-| Chromium plante dans le conteneur             | Mémoire partagée insuffisante : garder `--shm-size=1g`.                                  |
-| `Configuration invalide` au démarrage         | Variable manquante dans `.env` (le détail est sur stderr).                               |
+| Symptôme                                      | Cause probable / solution                                                                                 |
+| --------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| `expired` juste après le login                | `CESI_LOGGED_IN_HOSTS` incomplet : relancer `npm run explore`.                                            |
+| `absent` alors que le login a réussi          | Volume différent : vérifier `-v cesibridge-data:/data` dans la config du client MCP.                      |
+| noVNC inaccessible                            | Oubli de `--service-ports`, ou port 6080 déjà pris.                                                       |
+| `Executable doesn't exist at /ms-playwright…` | Versions Playwright décalées entre `package.json` et l'image : les réaligner et rebuild.                  |
+| Chromium plante dans le conteneur             | Mémoire partagée insuffisante : garder `--shm-size=1g`.                                                   |
+| `Configuration invalide` au démarrage         | Variable manquante dans `.env` (le détail est sur stderr).                                                |
+| `certificat TLS non vérifiable`               | Antivirus/proxy qui inspecte le HTTPS : définir `NODE_EXTRA_CA_CERTS` (voir « Intégration Claude Code »). |
 
 ## Sécurité
 
 - `state.json` donne accès à ton compte CESI : volume Docker dédié, droits 600, jamais dans Git.
 - noVNC n'est publié que sur `127.0.0.1` ; le conteneur de login est éphémère (`--rm`). VNC n'a pas de mot de passe : ne jamais exposer le port 6080 sur le réseau.
 - `.env` reste hors de l'image (`--env-file`).
-- Les réponses des outils ne contiennent jamais de cookie ni d'URL complète (seulement l'hôte).
+- Les réponses des outils ne contiennent jamais de cookie, de `sesskey` ni d'URL à jetons ; les liens renvoyés pointent uniquement vers Moodle.
+- `moodle_download_resource` n'accepte que `https://moodle.cesi.fr` (`/pluginfile.php`, `/mod/resource/view.php`, `/mod/folder/`), vérifie chaque redirection, assainit le nom de fichier et n'écrase rien.
+- `scholarvox_get_toc` ne lit que le sommaire public, jamais le texte des livres (licence).
 - Vérifie que la charte informatique du CESI autorise l'automatisation de ton propre compte.

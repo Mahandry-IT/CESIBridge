@@ -4,7 +4,8 @@ ARG PLAYWRIGHT_VERSION=1.64.0
 
 FROM mcr.microsoft.com/playwright:v${PLAYWRIGHT_VERSION}-noble AS base
 ENV NODE_ENV=production \
-    CESI_STATE_PATH=/data/state.json
+    CESI_STATE_PATH=/data/state.json \
+    CESI_DOWNLOAD_DIR=/data/downloads
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force

@@ -1,0 +1,55 @@
+{
+  "course": { "id": "101", "numsections": 2 },
+  "section": [
+    {
+      "id": "11",
+      "section": 0,
+      "title": "Généralités",
+      "cmlist": ["201", "202", "203"],
+      "visible": true
+    },
+    { "id": "12", "section": 1, "title": "Bloc 1", "cmlist": ["204"], "visible": true },
+    { "id": "13", "section": 2, "title": "Section cachée", "cmlist": [], "visible": false }
+  ],
+  "cm": [
+    {
+      "id": "201",
+      "name": "Support de cours",
+      "modname": "Fichier",
+      "module": "resource",
+      "sectionid": "11",
+      "url": "https://moodle.cesi.fr/mod/resource/view.php?id=201",
+      "visible": true,
+      "uservisible": true
+    },
+    {
+      "id": "202",
+      "name": "Consigne",
+      "modname": "Zone texte et média",
+      "module": "label",
+      "sectionid": "11",
+      "visible": true,
+      "uservisible": true
+    },
+    {
+      "id": "203",
+      "name": "Activité restreinte",
+      "modname": "Devoir",
+      "module": "assign",
+      "sectionid": "11",
+      "url": "https://moodle.cesi.fr/mod/assign/view.php?id=203",
+      "visible": true,
+      "uservisible": false
+    },
+    {
+      "id": "204",
+      "name": "Quiz",
+      "modname": "Test",
+      "module": "quiz",
+      "sectionid": "12",
+      "url": "https://moodle.cesi.fr/mod/quiz/view.php?id=204",
+      "visible": true,
+      "uservisible": true
+    }
+  ]
+}

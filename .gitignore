@@ -6,3 +6,6 @@ state.json
 *.log
 coverage/
 secrets/
+
+# Réglages Claude Code propres à la machine
+.claude/settings.local.json

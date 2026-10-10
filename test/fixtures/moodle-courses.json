@@ -1,0 +1,35 @@
+{
+  "courses": [
+    {
+      "id": 101,
+      "fullname": "Algorithmique avancée",
+      "shortname": "ALGO-A",
+      "idnumber": "",
+      "summary": "<p>Résumé fictif</p>",
+      "summaryformat": 1,
+      "startdate": 1756677600,
+      "enddate": 1767135600,
+      "visible": true,
+      "viewurl": "https://moodle.cesi.fr/course/view.php?id=101",
+      "courseimage": "data:image/svg+xml;base64,AAAA",
+      "progress": 42.6,
+      "hasprogress": true,
+      "isfavourite": false,
+      "hidden": false,
+      "showshortname": false,
+      "coursecategory": "Informatique"
+    },
+    {
+      "id": 102,
+      "fullname": "Projet fictif",
+      "shortname": "PRJ",
+      "startdate": 1756677600,
+      "enddate": 0,
+      "viewurl": "https://evil.example.com/course/view.php?id=102",
+      "progress": null,
+      "hasprogress": false,
+      "coursecategory": "Projets"
+    }
+  ],
+  "nextoffset": 2
+}

@@ -1,0 +1,23 @@
+{
+  "mcpServers": {
+    "cesibridge": {
+      "command": "node",
+      "args": ["--env-file-if-exists=.env", "src/server.js"]
+    },
+    "playwright": {
+      "command": "node",
+      "args": [
+        "node_modules/@playwright/mcp/cli.js",
+        "--browser",
+        "chromium",
+        "--isolated",
+        "--storage-state",
+        "data/state.json",
+        "--allowed-origins",
+        "https://ent.cesi.fr;https://wayf.cesi.fr;https://sts.viacesi.fr;https://moodle.cesi.fr;https://univ.scholarvox.com;https://scenari.cesi.fr",
+        "--output-dir",
+        "data/playwright-mcp"
+      ]
+    }
+  }
+}

@@ -16,7 +16,8 @@
     "publish": "node --env-file-if-exists=.env scripts/publish.js",
     "test": "vitest run",
     "lint": "eslint .",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "mcp:browsers": "node node_modules/@playwright/mcp/node_modules/playwright-core/cli.js install chromium"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.32.1",
@@ -27,6 +28,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
+    "@playwright/mcp": "0.0.82",
     "eslint": "^10.12.0",
     "globals": "^17.13.0",
     "prettier": "^3.9.9",

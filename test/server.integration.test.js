@@ -11,6 +11,9 @@ const env = {
   CESI_ENT_URL: 'https://ent.example.invalid/',
   CESI_LOGGED_IN_HOSTS: 'ent.example.invalid',
   CESI_STATE_PATH: join(tmpdir(), 'cesibridge-absent', 'state.json'),
+  // Pas de reconnexion automatique dans les tests (chaîne vide = variable absente).
+  CESI_EMAIL: '',
+  CESI_PASSWORD: '',
 };
 
 describe('serveur MCP (stdio)', () => {
@@ -19,7 +22,7 @@ describe('serveur MCP (stdio)', () => {
     await client?.close();
   });
 
-  it('expose les deux outils et répond sans navigateur si la session est absente', async () => {
+  it('expose les outils et répond sans navigateur si la session est absente', async () => {
     client = new Client({ name: 'test', version: '0.0.0' });
     await client.connect(
       new StdioClientTransport({ command: process.execPath, args: [SERVER], env }),
@@ -29,9 +32,57 @@ describe('serveur MCP (stdio)', () => {
     const check = await client.callTool({ name: 'cesi_check_session', arguments: {} });
     const login = await client.callTool({ name: 'cesi_login', arguments: {} });
 
-    expect(tools.map((t) => t.name).sort()).toEqual(['cesi_check_session', 'cesi_login']);
+    expect(tools.map((t) => t.name).sort()).toEqual([
+      'cesi_check_session',
+      'cesi_login',
+      'moodle_download_resource',
+      'moodle_get_course',
+      'moodle_list_courses',
+      'moodle_upcoming_deadlines',
+      'scholarvox_get_toc',
+    ]);
+    const byName = Object.fromEntries(tools.map((t) => [t.name, t]));
+    for (const name of [
+      'moodle_list_courses',
+      'moodle_upcoming_deadlines',
+      'moodle_get_course',
+      'scholarvox_get_toc',
+    ]) {
+      expect(byName[name].annotations).toMatchObject({ readOnlyHint: true, openWorldHint: true });
+      expect(byName[name].outputSchema).toBeDefined();
+      expect(byName[name].description).toContain('site tiers');
+    }
+    expect(byName.moodle_download_resource.annotations).toMatchObject({
+      readOnlyHint: false,
+      destructiveHint: false,
+      openWorldHint: true,
+    });
+    expect(byName.scholarvox_get_toc.inputSchema.type).toBe('object');
     expect(check.structuredContent.status).toBe('absent');
     expect(login.content[0].text).toContain('localhost:6080');
+  });
+
+  it('outils Moodle sans session ni identifiants : procédure de login, sans navigateur', async () => {
+    client = new Client({ name: 'test', version: '0.0.0' });
+    await client.connect(
+      new StdioClientTransport({ command: process.execPath, args: [SERVER], env }),
+    );
+
+    const result = await client.callTool({ name: 'moodle_list_courses', arguments: {} });
+    const invalid = await client.callTool({
+      name: 'moodle_get_course',
+      arguments: { courseId: -1 },
+    });
+    const refused = await client.callTool({
+      name: 'moodle_download_resource',
+      arguments: { url: 'https://evil.example.com/pluginfile.php/1/a.pdf' },
+    });
+
+    expect(result.isError).toBe(true);
+    expect(result.content[0].text).toContain('localhost:6080');
+    expect(invalid.isError).toBe(true);
+    expect(refused.isError).toBe(true);
+    expect(refused.content[0].text).toContain('moodle.cesi.fr uniquement');
   });
 
   it('stdout ne contient que du JSON-RPC', async () => {
