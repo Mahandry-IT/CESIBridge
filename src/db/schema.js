@@ -73,6 +73,39 @@ CREATE TABLE seance_groupes (
 );
 `,
   },
+  {
+    version: 3,
+    // Calendrier des examens lu sur Moodle : une ligne par épreuve, remplacée en bloc par (filière, niveau, année).
+    // `source_hash` permet de ne pas relancer l'OCR tant que l'image du tableau n'a pas changé.
+    sql: `
+CREATE TABLE examens (
+  id          text PRIMARY KEY,
+  filiere     text NOT NULL,
+  niveau      text NOT NULL,
+  annee       text NOT NULL,
+  element     text NOT NULL,
+  bloc        text,
+  format      text,
+  plateforme  text,
+  session     text,
+  jour        date NOT NULL,
+  debut       time,
+  fin         time,
+  a_verifier  text[] NOT NULL DEFAULT '{}',
+  position    integer NOT NULL
+);
+CREATE INDEX examens_scope_idx ON examens (filiere, niveau, annee);
+CREATE TABLE examens_sources (
+  filiere     text NOT NULL,
+  niveau      text NOT NULL,
+  annee       text NOT NULL,
+  source_hash text NOT NULL,
+  image_url   text,
+  updated_at  timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (filiere, niveau, annee)
+);
+`,
+  },
 ];
 
 // Clé du verrou consultatif propre à l'application (évite deux synchros concurrentes pendant les migrations).
