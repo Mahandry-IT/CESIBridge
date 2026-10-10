@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DownloadError,
   downloadResource,
+  fetchResourceBytes,
   filenameFrom,
   sanitizeFilename,
   validateDownloadUrl,
@@ -190,6 +191,77 @@ describe('downloadResource', () => {
     await expect(
       run(fetch, { url: 'https://evil.com/pluginfile.php/1/a.pdf' }),
     ).rejects.toBeInstanceOf(DownloadError);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchResourceBytes', () => {
+  const isImage = (mime) => mime.startsWith('image/');
+  const run = (fetch, options = {}) =>
+    fetchResourceBytes({
+      url: 'https://moodle.cesi.fr/mod/resource/view.php?id=7',
+      cookieHeader: 'MoodleSession=x',
+      maxBytes: 1000,
+      fetch,
+      accept: isImage,
+      ...options,
+    });
+
+  it('renvoie les octets et le type MIME sans paramètres, cookies transmis', async () => {
+    const fetch = vi.fn(async () =>
+      response({ headers: { 'content-type': 'image/png; charset=binary' }, chunks: ['ab', 'cd'] }),
+    );
+
+    const result = await run(fetch);
+
+    expect(result.contentType).toBe('image/png');
+    expect(result.bytes.toString()).toBe('abcd');
+    const [href, init] = fetch.mock.calls[0];
+    expect(href).toContain('redirect=1');
+    expect(init).toMatchObject({ redirect: 'manual', headers: { cookie: 'MoodleSession=x' } });
+  });
+
+  it.each([['application/pdf'], ['text/html'], [null]])('refuse le type %s', async (type) => {
+    const headers = type ? { 'content-type': type } : {};
+    const fetch = vi.fn(async () => response({ headers, chunks: ['x'] }));
+
+    await expect(run(fetch)).rejects.toBeInstanceOf(DownloadError);
+  });
+
+  it('refuse un Content-Length trop grand', async () => {
+    const fetch = vi.fn(async () =>
+      response({ headers: { 'content-type': 'image/png', 'content-length': '5000' } }),
+    );
+
+    await expect(run(fetch)).rejects.toThrow(/trop volumineux/);
+  });
+
+  it('coupe un flux qui dépasse la taille maximale malgré un Content-Length absent', async () => {
+    const fetch = vi.fn(async () =>
+      response({
+        headers: { 'content-type': 'image/png' },
+        chunks: ['x'.repeat(600), 'y'.repeat(600)],
+      }),
+    );
+
+    await expect(run(fetch)).rejects.toThrow(/trop volumineux/);
+  });
+
+  it('refuse une redirection hors de Moodle', async () => {
+    const fetch = vi.fn(async () =>
+      response({ status: 302, headers: { location: 'https://evil.com/a.png' } }),
+    );
+
+    await expect(run(fetch)).rejects.toThrow(/hors de moodle/);
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('URL refusée avant tout appel réseau', async () => {
+    const fetch = vi.fn();
+
+    await expect(run(fetch, { url: 'https://evil.com/pluginfile.php/1/a.png' })).rejects.toThrow(
+      DownloadError,
+    );
     expect(fetch).not.toHaveBeenCalled();
   });
 });

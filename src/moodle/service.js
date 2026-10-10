@@ -1,6 +1,7 @@
 import { createMoodleClient } from './client.js';
 import { MOODLE_HOST } from './constants.js';
-import { downloadResource, validateDownloadUrl } from './download.js';
+import { downloadResource, fetchResourceBytes, validateDownloadUrl } from './download.js';
+import { selectExamCalendarActivity, selectSessionCourse } from './examCalendar.js';
 import { mapCourses, mapCourseState, mapEvents } from './mappers.js';
 import { openMoodle } from './open.js';
 import { extractScholarvoxBooks } from '../scholarvox/docid.js';
@@ -110,5 +111,32 @@ export function createMoodleService({ sessions, config, fetch = globalThis.fetch
     });
   }
 
-  return { listCourses, upcomingDeadlines, getCourse, download };
+  function fetchExamCalendar({ niveau, annee }) {
+    return withMoodle(async ({ client, context }) => {
+      const course = selectSessionCourse(await fetchCourses(client), { niveau, annee });
+      const sections = mapCourseState(
+        await client.call('core_courseformat_get_state', { courseid: course.id }),
+      );
+      const activity = selectExamCalendarActivity(sections);
+      await client.ensureOpen();
+      const cookies = await context.cookies(`https://${MOODLE_HOST}/`);
+      const cookieHeader = cookies.map(({ name, value }) => `${name}=${value}`).join('; ');
+      const { bytes, contentType } = await fetchResourceBytes({
+        url: activity.url,
+        cookieHeader,
+        maxBytes: config.downloadMaxBytes,
+        fetch,
+        accept: (mime) => mime.startsWith('image/'),
+      });
+      return {
+        bytes,
+        contentType,
+        url: activity.url,
+        courseId: course.id,
+        courseName: course.name,
+      };
+    });
+  }
+
+  return { listCourses, upcomingDeadlines, getCourse, download, fetchExamCalendar };
 }
