@@ -111,6 +111,20 @@ CREATE TABLE examens_sources (
     // Lien du cours Moodle rattaché à l'examen ; absent si aucun cours ne correspond.
     sql: `ALTER TABLE examens ADD COLUMN cours_url text;`,
   },
+  {
+    version: 5,
+    // Rappels déjà envoyés par e-mail. Pas de clé étrangère : `examens` est remplacée en bloc à chaque lecture.
+    // `jour` est la date de l'examen : un examen reporté est de nouveau rappelé.
+    sql: `
+CREATE TABLE examens_rappels (
+  exam_id text NOT NULL,
+  jours   integer NOT NULL,
+  jour    date NOT NULL,
+  sent_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY (exam_id, jours, jour)
+);
+`,
+  },
 ];
 
 // Clé du verrou consultatif propre à l'application (évite deux synchros concurrentes pendant les migrations).

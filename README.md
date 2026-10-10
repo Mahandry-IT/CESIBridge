@@ -31,7 +31,8 @@ src/browser/session.js   lecture/écriture du storageState (600), navigateur par
 src/browser/sso.js       détection « connecté » par hôte final, login automatique (machine à états)
 src/browser/sessionManager.js  session partagée : vérification, reconnexion unique, enregistrement
 src/moodle/              ouverture Moodle (SSO), client AJAX, conversion des réponses, téléchargement, image du calendrier des examens
-src/exams/               calendrier des examens : OCR, parsing, corrections, événements Google
+src/exams/               calendrier des examens : OCR, parsing, corrections, événements Google, rappels
+src/mail/                envoi SMTP (nodemailer) et contenu des e-mails de rappel
 src/schedule/, src/db/, src/google/  emploi du temps, PostgreSQL (migrations), Google Calendar
 src/scholarvox/          docid des liens de cours, sommaire public (/catalog/toc)
 src/tools/*.js           outils MCP
@@ -142,25 +143,51 @@ Les noms des intervenants figurent dans la description des événements : n'ajou
 
 ## Calendrier des examens
 
-Facultatif. Le cours Moodle de la catégorie « Ma session » (départagé par niveau et année) contient, dans la section « Généralités », une image « Calendrier des examens ». `npm run sync` la télécharge, la lit par OCR local (Tesseract, via `tesseract.js` et `sharp` ; aucune API externe, la langue française est embarquée), range les examens en base puis les publie dans l'agenda Google (si Google est configuré ; sinon ils restent seulement en base).
+Facultatif. Le cours Moodle de la catégorie « Ma session » (départagé par niveau et année) contient, dans la section « Généralités », une image « Calendrier des examens ». `npm run sync` la télécharge, la lit par OCR local (Tesseract, via `tesseract.js` et `sharp` ; aucune API externe, la langue française est embarquée), range les examens en base, les publie dans l'agenda Google (si Google est configuré ; sinon ils restent seulement en base) et envoie les rappels par e-mail (voir « Rappels par e-mail »).
 
 ### Activation
 
 Dans `.env` (voir `.env.example`) :
 
-| Variable                     | Défaut                         | Rôle                                                                                       |
-| ---------------------------- | ------------------------------ | ------------------------------------------------------------------------------------------ |
-| `CESI_FILIERE`               | —                              | Filière à retenir (ex. `FISE Informatique`). Avec `CESI_NIVEAU`, active la lecture.        |
-| `CESI_NIVEAU`                | —                              | `A1` à `A5`. Défini avec `CESI_FILIERE`, sinon erreur.                                     |
-| `CESI_ANNEE`                 | année en cours                 | `AAAA-AAAA` ; l'année change le 1er août (heure de Paris).                                 |
-| `CESI_EXAM_REMINDER_DAYS`    | `1`                            | Rappels en jours avant l'examen : 4 valeurs au plus, de 1 à 27, séparées par des virgules. |
-| `CESI_EXAM_CORRECTIONS_FILE` | `./data/exam-corrections.json` | Fichier de corrections (voir plus bas).                                                    |
+| Variable                     | Défaut                         | Rôle                                                                                                                                      |
+| ---------------------------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| `CESI_FILIERE`               | —                              | Filière à retenir (ex. `FISE Informatique`). Avec `CESI_NIVEAU`, active la lecture.                                                       |
+| `CESI_NIVEAU`                | —                              | `A1` à `A5`. Défini avec `CESI_FILIERE`, sinon erreur.                                                                                    |
+| `CESI_ANNEE`                 | année en cours                 | `AAAA-AAAA` ; l'année change le 1er août (heure de Paris).                                                                                |
+| `CESI_EXAM_REMINDER_DAYS`    | `1`                            | Jours avant l'examen où un rappel part par e-mail (4 valeurs au plus, de 1 à 27, séparées par des virgules), en plus du rappel à 7 jours. |
+| `CESI_EXAM_CORRECTIONS_FILE` | `./data/exam-corrections.json` | Fichier de corrections (voir plus bas).                                                                                                   |
 
 Sans `CESI_FILIERE` ni `CESI_NIVEAU`, la fonctionnalité est désactivée.
 
 ### Ce qui est publié
 
-Un événement par examen, au titre de l'élément évalué. Les rattrapages sont préfixés « [Rattrapage] ». Si l'horaire manque, l'événement couvre la journée entière. Le bloc, le format, la session et la plateforme sont dans la description, avec le lien « Calendrier d'origine » et, quand un seul cours Moodle de l'année et du niveau correspond au bloc, le lien « Cours » vers ce cours. Les rappels sont toujours à 7 jours, plus les jours de `CESI_EXAM_REMINDER_DAYS`. Les examens ont leur propre marqueur : ils n'interfèrent pas avec les séances.
+Un événement par examen, au titre de l'élément évalué. Les rattrapages sont préfixés « [Rattrapage] ». Si l'horaire manque, l'événement couvre la journée entière. Le bloc, le format, la session et la plateforme sont dans la description, avec le lien « Calendrier d'origine » et, quand un seul cours Moodle de l'année et du niveau correspond au bloc, le lien « Cours » vers ce cours. Aucun rappel Google n'est posé (voir « Rappels par e-mail »). Les examens ont leur propre marqueur : ils n'interfèrent pas avec les séances.
+
+### Rappels par e-mail
+
+Les rappels Google Calendar (`reminders.overrides`) posés par le compte de service ne s'appliquent qu'à ce compte : tu ne recevrais rien. CESIBridge envoie donc lui-même un e-mail récapitulatif par exécution, au plus un par examen et par passage, à 7 jours de l'examen et aux jours de `CESI_EXAM_REMINDER_DAYS`. Sans `CESI_MAIL_USER`, aucun rappel n'est envoyé (une ligne de log le signale).
+
+| Variable              | Défaut           | Rôle                                                                        |
+| --------------------- | ---------------- | --------------------------------------------------------------------------- |
+| `CESI_MAIL_USER`      | —                | Adresse expéditrice (compte SMTP). Avec `CESI_MAIL_PASSWORD`, sinon erreur. |
+| `CESI_MAIL_PASSWORD`  | —                | Mot de passe d'application (jamais le mot de passe du compte).              |
+| `CESI_MAIL_TO`        | `CESI_MAIL_USER` | Destinataire.                                                               |
+| `CESI_MAIL_SMTP_HOST` | `smtp.gmail.com` | Serveur SMTP.                                                               |
+| `CESI_MAIL_SMTP_PORT` | `465`            | 1 à 65535. Le 465 utilise TLS ; tout autre port exige STARTTLS.             |
+
+**Mot de passe d'application Gmail** : activer la validation en deux étapes sur le compte Google, puis créer un mot de passe d'application (compte Google → Sécurité → « Mots de passe des applications »). C'est un secret qui donne accès à la messagerie : à mettre uniquement dans `.env`, jamais dans Git ni dans un log (il est exclu de la sérialisation de la configuration).
+
+**Lancer `npm run sync` chaque jour** : un rappel ne part que si l'outil tourne. Exemple de tâche planifiée Windows (tous les jours à 8 h) :
+
+```bat
+schtasks /Create /SC DAILY /ST 08:00 /TN "CESIBridge sync" /TR "cmd /c cd /d D:cheminCESIBridge && npm run sync"
+```
+
+Avec Docker, planifier `docker compose --profile sync run --rm sync` de la même façon (le service `sync` reçoit déjà `.env`, donc les variables `CESI_MAIL_*`).
+
+**Rattrapage** : si l'outil n'a pas tourné pendant plusieurs jours, un seul rappel part par examen (avec le nombre de jours réellement restants), pas une rafale. Chaque seuil n'est envoyé qu'une fois, par examen et par date ; un examen reporté est de nouveau rappelé. Si l'envoi échoue, rien n'est marqué et le prochain passage réessaie ; si le marquage échoue après un envoi réussi, un doublon est possible plutôt qu'un rappel perdu.
+
+**Garantir le classement « Important » dans Gmail** : les en-têtes de priorité (`X-Priority`, `X-MSMail-Priority`, `Importance`) sont posés, mais c'est Gmail qui décide du marqueur « Important ». Pour le garantir, créer un filtre (Paramètres → Filtres et adresses bloquées) sur l'objet `"[CESI Examen]"` avec « Toujours le marquer comme important », et éventuellement « Ne jamais l'envoyer dans le spam » et « Activer le suivi ».
 
 ### Lectures douteuses
 
@@ -200,7 +227,7 @@ docker run --rm -v cesibridge-data:/data -v "$PWD/data:/src:ro" alpine cp /src/e
 
 ### Cache et republication
 
-L'OCR n'est relancé que si l'image ou le fichier de corrections change (ou si le lecteur évolue). Sinon les examens de la base sont réutilisés. Une lecture qui ne trouve aucun examen laisse la base inchangée. `npm run publish` republie les examens enregistrés par le dernier `npm run sync`, sans Moodle ni OCR (Google est alors obligatoire) ; sans lecture préalable, il n'efface rien.
+L'OCR n'est relancé que si l'image ou le fichier de corrections change (ou si le lecteur évolue). Sinon les examens de la base sont réutilisés. Une lecture qui ne trouve aucun examen laisse la base inchangée. `npm run publish` republie les examens enregistrés par le dernier `npm run sync`, sans Moodle ni OCR (Google est alors obligatoire) ; sans lecture préalable, il n'efface rien. Il n'envoie aucun e-mail.
 
 ### Limites
 

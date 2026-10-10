@@ -25,11 +25,21 @@ describe('MIGRATIONS', () => {
   it('déclare la version 3 : examens et sources, sans rien supprimer', () => {
     const v3 = MIGRATIONS.find((m) => m.version === 3);
 
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4]);
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4, 5]);
     expect(v3.sql).toContain('CREATE TABLE examens (');
     expect(v3.sql).toContain('CREATE TABLE examens_sources (');
     expect(v3.sql).toContain('PRIMARY KEY (filiere, niveau, annee)');
     expect(v3.sql).not.toMatch(/DROP/);
+  });
+});
+
+describe('migration 5', () => {
+  it('crée examens_rappels, clé (examen, seuil, jour) et sans clé étrangère', () => {
+    const v5 = MIGRATIONS.find((m) => m.version === 5);
+
+    expect(v5.sql).toContain('CREATE TABLE examens_rappels (');
+    expect(v5.sql).toContain('PRIMARY KEY (exam_id, jours, jour)');
+    expect(v5.sql).not.toMatch(/REFERENCES|DROP/);
   });
 });
 
@@ -60,7 +70,7 @@ describe('runMigrations', () => {
     const pool = fakePool([1]);
     await runMigrations(pool);
 
-    expect([...pool.versions].sort()).toEqual([1, 2, 3, 4]);
+    expect([...pool.versions].sort()).toEqual([1, 2, 3, 4, 5]);
     expect(pool.log.filter((l) => l.startsWith('INSERT'))).toHaveLength(MIGRATIONS.length - 1);
   });
 

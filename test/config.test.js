@@ -1,3 +1,4 @@
+import util from 'node:util';
 import { describe, expect, it } from 'vitest';
 import { ConfigError, loadConfig, loadPublishConfig, loadSyncConfig } from '../src/config.js';
 
@@ -274,5 +275,85 @@ describe('configuration des examens', () => {
     ['5 rappels distincts', { CESI_EXAM_REMINDER_DAYS: '1,2,3,4,5' }],
   ])('rejette : %s', (_label, override) => {
     expect(() => loadSyncConfig({ ...env, ...exams, ...override })).toThrow(ConfigError);
+  });
+});
+
+describe('configuration du mail', () => {
+  const env = {
+    ...validEnv,
+    CESI_EMAIL: 'a.b@viacesi.fr',
+    CESI_PASSWORD: 's3cret',
+    DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  };
+  const mail = { CESI_MAIL_USER: 'moi@gmail.com', CESI_MAIL_PASSWORD: 'app-pass-word' };
+
+  it('est désactivée par défaut, chaînes vides comprises', () => {
+    expect(loadSyncConfig(env).mail).toBeNull();
+    expect(loadSyncConfig({ ...env, CESI_MAIL_USER: '', CESI_MAIL_PASSWORD: '' }).mail).toBeNull();
+  });
+
+  it('applique les défauts : destinataire = expéditeur, Gmail en TLS implicite', () => {
+    expect(loadSyncConfig({ ...env, ...mail }).mail).toEqual({
+      host: 'smtp.gmail.com',
+      port: 465,
+      user: 'moi@gmail.com',
+      to: 'moi@gmail.com',
+    });
+  });
+
+  it('lit le destinataire, l’hôte et le port', () => {
+    const config = loadSyncConfig({
+      ...env,
+      ...mail,
+      CESI_MAIL_TO: 'autre@example.fr',
+      CESI_MAIL_SMTP_HOST: 'smtp.example.fr',
+      CESI_MAIL_SMTP_PORT: '587',
+    });
+    expect(config.mail).toMatchObject({
+      to: 'autre@example.fr',
+      host: 'smtp.example.fr',
+      port: 587,
+    });
+  });
+
+  it('expose le mot de passe sans jamais le sérialiser', () => {
+    const { mail: config } = loadSyncConfig({ ...env, ...mail });
+    expect(config.password).toBe('app-pass-word');
+    expect(JSON.stringify(config)).not.toContain('app-pass-word');
+    expect(JSON.stringify({ ...config })).not.toContain('app-pass-word');
+    expect(Object.keys(config)).not.toContain('password');
+    expect(util.inspect(config)).not.toContain('app-pass-word');
+  });
+
+  it('n’est pas lue par publish', () => {
+    const publishEnv = {
+      DATABASE_URL: env.DATABASE_URL,
+      GOOGLE_CALENDAR_ID: 'c',
+      GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/k',
+    };
+    expect(loadPublishConfig({ ...publishEnv, ...mail })).not.toHaveProperty('mail');
+  });
+
+  it.each([
+    ['adresse seule', { CESI_MAIL_USER: 'moi@gmail.com' }],
+    ['mot de passe seul', { CESI_MAIL_PASSWORD: 'app-pass-word' }],
+  ])('rejette : %s', (_label, override) => {
+    expect(() => loadSyncConfig({ ...env, ...override })).toThrow(/doivent être définies ensemble/);
+  });
+
+  it.each([
+    ['adresse invalide', { CESI_MAIL_USER: 'pas-une-adresse' }],
+    ['destinataire invalide', { CESI_MAIL_TO: 'pas-une-adresse' }],
+    ['port à 0', { CESI_MAIL_SMTP_PORT: '0' }],
+    ['port trop grand', { CESI_MAIL_SMTP_PORT: '65536' }],
+    ['port non entier', { CESI_MAIL_SMTP_PORT: '46.5' }],
+    ['port non numérique', { CESI_MAIL_SMTP_PORT: 'smtp' }],
+  ])('rejette : %s sans citer la valeur', (_label, override) => {
+    const attempt = () => loadSyncConfig({ ...env, ...mail, ...override });
+    expect(attempt).toThrow(ConfigError);
+    const [value] = Object.values(override);
+    expect(() => attempt()).toThrow(
+      expect.objectContaining({ message: expect.not.stringContaining(value) }),
+    );
   });
 });

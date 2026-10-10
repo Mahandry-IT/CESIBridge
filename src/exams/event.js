@@ -1,14 +1,9 @@
-import { base32hex, managed, TIMEZONE } from '../google/event.js';
+import { base32hex, TIMEZONE } from '../google/event.js';
 import { nextDay, parisMidnight } from '../schedule/weeks.js';
 
 // Source et préfixe distincts de ceux des cours : `publishWeek` ne voit ni ne supprime jamais un examen.
 export const EXAM_SOURCE = 'cesibridge-exam';
 const ID_PREFIX = 'cesiepreuve';
-const MINUTES_PER_DAY = 1440;
-const WEEK_REMINDER = 7 * MINUTES_PER_DAY;
-// Limites de l'API : 5 rappels par événement, 4 semaines au plus avant le début.
-const MAX_REMINDERS = 5;
-const MAX_REMINDER_MINUTES = 40_320;
 const TIME = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 /** Identifiant stable : toujours encodé en base32hex (l'id d'examen est arbitraire). */
@@ -35,21 +30,6 @@ function when(exam) {
   return { start: at(start), end: at(end) };
 }
 
-function reminders(reminderDays) {
-  const custom = reminderDays
-    .filter((days) => Number.isFinite(days) && days > 0)
-    .map((days) => Math.round(days * MINUTES_PER_DAY))
-    .filter((minutes) => minutes <= MAX_REMINDER_MINUTES && minutes !== WEEK_REMINDER);
-  // Le rappel à 7 jours est garanti : on sacrifie les rappels personnalisés les plus lointains.
-  const others = [...new Set(custom)].sort((a, b) => a - b).slice(0, MAX_REMINDERS - 1);
-  return {
-    useDefault: false,
-    overrides: [...others, WEEK_REMINDER]
-      .sort((a, b) => a - b)
-      .map((minutes) => ({ method: 'popup', minutes })),
-  };
-}
-
 function description(exam, imageUrl) {
   const lines = [
     ['Bloc', exam.bloc],
@@ -73,25 +53,13 @@ function summary(exam) {
 }
 
 /** Examen -> ressource événement Google Calendar. */
-export function toExamEvent(exam, { reminderDays = [], imageUrl } = {}) {
+export function toExamEvent(exam, { imageUrl } = {}) {
   return {
     id: examEventId(exam),
     status: 'confirmed',
     summary: summary(exam),
     description: description(exam, imageUrl),
     ...when(exam),
-    reminders: reminders(reminderDays),
     extendedProperties: { private: { source: EXAM_SOURCE, code: exam.id } },
   };
 }
-
-// Google renvoie les rappels dans un ordre quelconque : on compare des ensembles.
-const remindersKey = (event) =>
-  JSON.stringify([
-    event.reminders?.useDefault ?? false,
-    (event.reminders?.overrides ?? []).map((o) => `${o.method}:${o.minutes}`).sort(),
-  ]);
-
-/** Équivalence pour `diffEvents` : champs gérés + rappels. */
-export const sameExamEvent = (a, b) =>
-  managed(a) === managed(b) && remindersKey(a) === remindersKey(b);

@@ -1,7 +1,7 @@
 import { diffEvents } from '../google/event.js';
 import { startOf } from '../google/publish.js';
 import { nextDay, parisMidnight } from '../schedule/weeks.js';
-import { EXAM_SOURCE, sameExamEvent, toExamEvent } from './event.js';
+import { EXAM_SOURCE, toExamEvent } from './event.js';
 
 const YEAR = /^(\d{4})-(\d{4})$/;
 
@@ -22,18 +22,15 @@ function windowOf(annee, exams) {
 }
 
 /** Aligne l'agenda Google sur les examens d'une année scolaire. Renvoie `{ created, updated, deleted }`. */
-export async function publishExams(client, annee, exams, { reminderDays = [], imageUrl } = {}) {
+export async function publishExams(client, annee, exams, { imageUrl } = {}) {
   const { from, to } = windowOf(annee, exams);
   const listed = await client.listEvents(from, to, EXAM_SOURCE);
   const existing = listed.filter((event) => {
     const start = startOf(event);
     return start >= from.getTime() && start < to.getTime();
   });
-  const desired = exams.map((exam) => toExamEvent(exam, { reminderDays, imageUrl }));
-  const { toCreate, toUpdate, toDelete } = diffEvents(desired, existing, {
-    source: EXAM_SOURCE,
-    same: sameExamEvent,
-  });
+  const desired = exams.map((exam) => toExamEvent(exam, { imageUrl }));
+  const { toCreate, toUpdate, toDelete } = diffEvents(desired, existing, { source: EXAM_SOURCE });
   for (const event of toCreate) await client.upsertEvent(event);
   for (const event of toUpdate) await client.updateEvent(event);
   for (const id of toDelete) await client.deleteEvent(id);

@@ -34,16 +34,13 @@ async function resolveCodePersonne(pool) {
 
 // Les examens viennent de la dernière lecture enregistrée par `npm run sync`.
 async function publishExamCalendar(pool, client) {
-  const { filiere, niveau, annee, reminderDays } = config.exams;
+  const { filiere, niveau, annee } = config.exams;
   const scope = { filiere, niveau, annee };
   const source = await getExamSource(pool, scope);
   // Jamais lus : publier une liste vide effacerait des examens sans raison.
   if (!source) return `Examens ${annee} : aucun en base (lancer \`npm run sync\`)`;
   const exams = await listExams(pool, scope);
-  const counts = await publishExams(client, annee, exams, {
-    reminderDays,
-    imageUrl: source.imageUrl,
-  });
+  const counts = await publishExams(client, annee, exams, { imageUrl: source.imageUrl });
   return `Examens ${annee} : ${exams.length} examen(s), ${formatCounts(counts)}`;
 }
 

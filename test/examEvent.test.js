@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { diffEvents, toEvent } from '../src/google/event.js';
-import { examEventId, sameExamEvent, toExamEvent } from '../src/exams/event.js';
+import { examEventId, toExamEvent } from '../src/exams/event.js';
 
 const exam = (override = {}) => ({
   id: 'ex-2026-1',
@@ -19,8 +19,6 @@ const exam = (override = {}) => ({
   ...override,
 });
 
-const days = (n) => ({ method: 'popup', minutes: n * 1440 });
-
 describe('examEventId', () => {
   it('est valide pour Google et stable', () => {
     const id = examEventId(exam({ id: 'Éx/ 1 é' }));
@@ -35,7 +33,7 @@ describe('examEventId', () => {
 
 describe('toExamEvent', () => {
   it('construit un événement horodaté complet', () => {
-    expect(toExamEvent(exam(), { reminderDays: [1], imageUrl: 'https://x.test/cal.png' })).toEqual({
+    expect(toExamEvent(exam(), { imageUrl: 'https://x.test/cal.png' })).toEqual({
       id: examEventId(exam()),
       status: 'confirmed',
       summary: 'Algorithmique - Recherche opérationnelle (CCTL)',
@@ -43,7 +41,6 @@ describe('toExamEvent', () => {
         "Bloc : [A3 FISE info] Algorithmique\nFormat : Test\nSession : Initiale\nPlateforme : Global Exam\nCalendrier d'origine : https://x.test/cal.png",
       start: { dateTime: '2026-11-05T07:45:00.000Z', timeZone: 'Europe/Paris' },
       end: { dateTime: '2026-11-05T08:40:00.000Z', timeZone: 'Europe/Paris' },
-      reminders: { useDefault: false, overrides: [days(1), days(7)] },
       extendedProperties: { private: { source: 'cesibridge-exam', code: 'ex-2026-1' } },
     });
   });
@@ -87,39 +84,21 @@ describe('toExamEvent', () => {
     ).toBe('');
   });
 
-  it.each([
-    [undefined, [days(7)]],
-    [[1], [days(1), days(7)]],
-    [
-      [3, 1, 2],
-      [days(1), days(2), days(3), days(7)],
-    ],
-    [
-      [7, 1, 1],
-      [days(1), days(7)],
-    ],
-    [
-      [1, 2, 3, 4, 5, 6],
-      [days(1), days(2), days(3), days(4), days(7)],
-    ],
-  ])('rappels %j', (reminderDays, overrides) => {
-    expect(toExamEvent(exam(), { reminderDays }).reminders).toEqual({
-      useDefault: false,
-      overrides,
-    });
+  it('ne pose aucun rappel : ils sont envoyés par e-mail', () => {
+    expect(toExamEvent(exam())).not.toHaveProperty('reminders');
   });
 });
 
 describe('diffEvents pour les examens', () => {
-  const options = { source: 'cesibridge-exam', same: sameExamEvent };
-  const a = toExamEvent(exam(), { reminderDays: [1, 2] });
+  const options = { source: 'cesibridge-exam' };
+  const a = toExamEvent(exam());
 
-  it('ignore l’ordre des rappels et useDefault renvoyés par Google', () => {
+  it('ignore les rappels et le format de date renvoyés par Google', () => {
     const fromGoogle = {
       ...a,
       start: { dateTime: '2026-11-05T08:45:00+01:00', timeZone: 'Europe/Paris' },
       end: { dateTime: '2026-11-05T09:40:00+01:00', timeZone: 'Europe/Paris' },
-      reminders: { overrides: [...a.reminders.overrides].reverse() },
+      reminders: { useDefault: false, overrides: [{ method: 'popup', minutes: 1440 }] },
     };
     expect(diffEvents([a], [fromGoogle], options)).toEqual({
       toCreate: [],
@@ -128,17 +107,9 @@ describe('diffEvents pour les examens', () => {
     });
   });
 
-  it('met à jour quand les rappels changent', () => {
-    const changed = toExamEvent(exam(), { reminderDays: [3] });
+  it('met à jour quand un champ géré change', () => {
+    const changed = toExamEvent(exam({ element: 'Autre' }));
     expect(diffEvents([changed], [a], options).toUpdate.map((e) => e.id)).toEqual([a.id]);
-  });
-
-  it('met à jour si Google n’a pas de rappels personnalisés', () => {
-    const { reminders, ...bare } = a;
-    expect(reminders).toBeDefined();
-    expect(
-      diffEvents([a], [{ ...bare, reminders: { useDefault: true } }], options).toUpdate,
-    ).toHaveLength(1);
   });
 
   it('supprime un examen disparu', () => {

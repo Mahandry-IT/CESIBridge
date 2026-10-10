@@ -34,24 +34,16 @@ describe('publishExams', () => {
   });
 
   it('crée, met à jour et supprime', async () => {
-    const kept = toExamEvent(exam('a'), { reminderDays: [1] });
-    const stale = toExamEvent(exam('b'), { reminderDays: [1] });
-    const old = toExamEvent(exam('c'), { reminderDays: [1] });
+    const kept = toExamEvent(exam('a'));
+    const stale = toExamEvent(exam('b'));
+    const old = toExamEvent(exam('c'));
     const client = fakeClient([kept, { ...stale, summary: 'Ancien titre' }, old]);
-    const result = await publishExams(client, '2026-2027', [exam('a'), exam('b'), exam('d')], {
-      reminderDays: [1],
-    });
+    const result = await publishExams(client, '2026-2027', [exam('a'), exam('b'), exam('d')]);
 
     expect(result).toEqual({ created: 1, updated: 1, deleted: 1 });
     expect(client.upsertEvent.mock.calls[0][0].id).toBe(examEventId(exam('d')));
     expect(client.updateEvent.mock.calls[0][0].id).toBe(examEventId(exam('b')));
     expect(client.deleteEvent).toHaveBeenCalledWith(examEventId(exam('c')));
-  });
-
-  it('met à jour tous les examens quand les rappels changent', async () => {
-    const client = fakeClient([toExamEvent(exam('a'), { reminderDays: [1] })]);
-    const result = await publishExams(client, '2026-2027', [exam('a')], { reminderDays: [2] });
-    expect(result).toEqual({ created: 0, updated: 1, deleted: 0 });
   });
 
   it('ne supprime pas un événement d’une autre source', async () => {

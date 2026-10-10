@@ -13,6 +13,9 @@ const DEFAULT_EXAM_CORRECTIONS_FILE = './data/exam-corrections.json';
 const DEFAULT_EXAM_REMINDER_DAYS = Object.freeze([1]);
 const MAX_EXAM_REMINDER_DAYS = 27;
 const MAX_EXAM_REMINDERS = 4;
+const DEFAULT_MAIL_SMTP_HOST = 'smtp.gmail.com';
+const DEFAULT_MAIL_SMTP_PORT = 465;
+const MAX_PORT = 65_535;
 // Les années scolaires commencent le 1er août.
 const SCHOOL_YEAR_START_MONTH = 8;
 
@@ -119,6 +122,21 @@ const examsShape = {
   ),
 };
 
+// Rappels par e-mail : l'adresse et le mot de passe d'application vont ensemble.
+const mailShape = {
+  CESI_MAIL_USER: z.preprocess(emptyToUndefined, z.email().optional()),
+  CESI_MAIL_PASSWORD: z.preprocess(emptyToUndefined, z.string().min(1).optional()),
+  CESI_MAIL_TO: z.preprocess(emptyToUndefined, z.email().optional()),
+  CESI_MAIL_SMTP_HOST: z.preprocess(
+    emptyToUndefined,
+    z.string().trim().min(1).default(DEFAULT_MAIL_SMTP_HOST),
+  ),
+  CESI_MAIL_SMTP_PORT: z.preprocess(
+    emptyToUndefined,
+    z.coerce.number().int().min(1).max(MAX_PORT).default(DEFAULT_MAIL_SMTP_PORT),
+  ),
+};
+
 const baseShape = {
   CESI_ENT_URL: z.url({ protocol: /^https?$/ }),
   CESI_LOGGED_IN_HOSTS: hostList,
@@ -154,6 +172,7 @@ const syncSchema = z.object({
   CESI_DOWNLOAD_MAX_MB: downloadMaxMbField,
   ...googleShape,
   ...examsShape,
+  ...mailShape,
 });
 
 // `npm run publish` : republie depuis la base, sans ENT ni navigateur. Google est ici obligatoire.
@@ -244,6 +263,25 @@ function makeCredentials(email, password) {
   return Object.freeze(credentials);
 }
 
+// Mail facultatif : le mot de passe d'application est non énumérable, comme celui des identifiants.
+function mailConfig(parsed) {
+  const { CESI_MAIL_USER: user, CESI_MAIL_PASSWORD: password } = parsed;
+  if (user === undefined && password === undefined) return null;
+  if (user === undefined || password === undefined) {
+    throw new ConfigError(
+      'Configuration invalide :\n  - CESI_MAIL_USER et CESI_MAIL_PASSWORD doivent être définies ensemble',
+    );
+  }
+  const mail = {
+    host: parsed.CESI_MAIL_SMTP_HOST,
+    port: parsed.CESI_MAIL_SMTP_PORT,
+    user,
+    to: parsed.CESI_MAIL_TO ?? user,
+  };
+  Object.defineProperty(mail, 'password', { value: password });
+  return Object.freeze(mail);
+}
+
 function optionalCredentials(parsed) {
   const { CESI_EMAIL: email, CESI_PASSWORD: password } = parsed;
   if (email === undefined && password === undefined) return null;
@@ -279,6 +317,7 @@ export function loadSyncConfig(env = process.env, now = new Date()) {
     moodleUrl: parsed.CESI_MOODLE_URL ?? null,
     downloadMaxBytes: parsed.CESI_DOWNLOAD_MAX_MB * BYTES_PER_MB,
     exams: examsConfig(parsed, now),
+    mail: mailConfig(parsed),
   });
 }
 
