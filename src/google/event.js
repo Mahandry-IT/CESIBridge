@@ -52,7 +52,8 @@ function description(seance) {
   const groups = seance.groupes.map((g) => g.libelle ?? g.code);
   const lines = [
     ['Module', seance.module],
-    ['Thème', seance.theme],
+    // La matière sert de titre quand le thème manque : inutile de la répéter ici.
+    ['Thème', seance.theme ? seance.matiere : null],
     ['Intervenant(s)', people.join(', ')],
     ['Groupe(s)', groups.join(', ')],
   ];
@@ -70,7 +71,7 @@ export function toEvent(seance) {
   return {
     id: eventId(seance.code),
     status: 'confirmed',
-    summary: seance.matiere ?? seance.titre ?? DEFAULT_SUMMARY,
+    summary: seance.theme ?? seance.matiere ?? seance.titre ?? DEFAULT_SUMMARY,
     location: seance.salles.join(', '),
     description: description(seance),
     ...when,
