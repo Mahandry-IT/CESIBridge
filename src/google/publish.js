@@ -2,7 +2,7 @@ import { parisMidnight, weekBounds } from '../schedule/weeks.js';
 import { diffEvents, toEvent } from './event.js';
 
 // Début d'un événement existant, pour ignorer ceux qui chevauchent seulement la semaine voisine.
-const startOf = (event) => {
+export const startOf = (event) => {
   if (event.start?.dateTime) return Date.parse(event.start.dateTime);
   return event.start?.date ? parisMidnight(event.start.date).getTime() : Number.NaN;
 };

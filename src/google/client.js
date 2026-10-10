@@ -89,15 +89,15 @@ export function createCalendarClient({
   }
 
   return {
-    /** Événements créés par CESIBridge sur `[timeMin, timeMax[` (instants `Date`), toutes pages. */
-    async listEvents(timeMin, timeMax) {
+    /** Événements créés par CESIBridge (flux `source`) sur `[timeMin, timeMax[` (instants `Date`), toutes pages. */
+    async listEvents(timeMin, timeMax, source = SOURCE) {
       const events = [];
       let pageToken;
       do {
         const query = new URLSearchParams({
           timeMin: timeMin.toISOString(),
           timeMax: timeMax.toISOString(),
-          privateExtendedProperty: `source=${SOURCE}`,
+          privateExtendedProperty: `source=${source}`,
           singleEvents: 'true',
           showDeleted: 'false',
           maxResults: String(PAGE_SIZE),
