@@ -73,51 +73,109 @@ export class LoginError extends Error {
   name = 'LoginError';
 }
 
-const FORM_TIMEOUT_MS = 15_000;
 const POLL_INTERVAL_MS = 300;
 
+// `input#login` : la page de connexion Moodle a un `form#login` qu'il ne faut pas remplir.
+const SELECTORS = Object.freeze({
+  email: 'input#login',
+  user: '#userNameInput',
+  password: '#passwordInput',
+  submit: '#submitButton',
+  error: '#errorText',
+});
+
 /**
- * Login automatique (wayf → ADFS), un seul essai : jamais de nouvelle tentative, pour ne pas
- * verrouiller le compte. Les erreurs ne contiennent ni URL, ni identifiant, ni mot de passe.
+ * Décide de la prochaine action du login à partir de l'état observé de la page.
+ * Chaque formulaire n'est rempli qu'une fois : pas de seconde tentative, donc pas de verrouillage ADFS.
+ * @returns {'done'|'refused'|'fill-email'|'fill-password'|'wait'}
  */
-export async function autoLogin(page, { entUrl, loggedInHosts, timeoutMs, credentials }) {
-  const deadline = Date.now() + timeoutMs;
-  const formTimeout = Math.min(FORM_TIMEOUT_MS, timeoutMs);
-  await page.goto(entUrl, { waitUntil: 'load', timeout: timeoutMs });
-  await settle(page, timeoutMs);
-  if (isLoggedInHost(page.url(), loggedInHosts)) return hostOf(page.url());
+export function nextLoginAction({ loggedIn, errorVisible, emailVisible, passwordVisible, done }) {
+  if (errorVisible) return 'refused';
+  if (loggedIn) return 'done';
+  if (passwordVisible && !done.password) return 'fill-password';
+  if (emailVisible && !done.email) return 'fill-email';
+  return 'wait';
+}
 
-  const wayfEmail = page.locator('#login');
-  const adfsUser = page.locator('#userNameInput');
-  const adfsPassword = page.locator('#passwordInput');
-  const adfsError = page.locator('#errorText');
-
+// Pendant une navigation, le contexte d'exécution peut disparaître : on considère l'élément absent.
+async function visible(page, selector) {
   try {
-    // La page wayf peut être absente (ADFS directement) : on attend l'un ou l'autre.
-    await wayfEmail.or(adfsPassword).first().waitFor({ state: 'visible', timeout: formTimeout });
-    if (await wayfEmail.isVisible()) {
-      await wayfEmail.fill(credentials.email);
-      await wayfEmail.press('Enter');
-    }
-    await adfsPassword.waitFor({ state: 'visible', timeout: formTimeout });
-    // L'identifiant ADFS peut être pré-rempli : on le remplace quand même.
-    if (await adfsUser.isVisible()) await adfsUser.fill(credentials.email);
-    await adfsPassword.fill(credentials.password);
-    const submit = page.locator('#submitButton');
-    if (await submit.isVisible()) await submit.click();
-    else await adfsPassword.press('Enter');
-  } catch (error) {
-    if (error.name !== 'TimeoutError') throw new LoginError('formulaire de login inattendu');
-    throw new LoginError(`formulaire de login introuvable (hôte ${hostOf(page.url())})`);
+    return await page.locator(selector).first().isVisible();
+  } catch {
+    return false;
   }
+}
 
+async function observe(page, loggedInHosts) {
+  const [errorVisible, emailVisible, passwordVisible] = await Promise.all([
+    visible(page, SELECTORS.error),
+    visible(page, SELECTORS.email),
+    visible(page, SELECTORS.password),
+  ]);
+  return {
+    loggedIn: isLoggedInHost(page.url(), loggedInHosts),
+    errorVisible,
+    emailVisible,
+    passwordVisible,
+  };
+}
+
+async function fillEmail(page, credentials) {
+  const email = page.locator(SELECTORS.email).first();
+  await email.fill(credentials.email);
+  await email.press('Enter');
+}
+
+async function fillPassword(page, credentials) {
+  // L'identifiant ADFS peut être pré-rempli : on le remplace quand même.
+  if (await visible(page, SELECTORS.user))
+    await page.locator(SELECTORS.user).fill(credentials.email);
+  const password = page.locator(SELECTORS.password);
+  await password.fill(credentials.password);
+  if (await visible(page, SELECTORS.submit)) await page.locator(SELECTORS.submit).click();
+  else await password.press('Enter');
+}
+
+/**
+ * Login automatique (wayf → ADFS) depuis `startUrl` (ENT par défaut), en machine à états :
+ * gère la reconnexion silencieuse (ADFS ne redemande pas le mot de passe).
+ * Les erreurs ne contiennent ni URL, ni identifiant, ni mot de passe.
+ */
+export async function autoLogin(
+  page,
+  { entUrl, startUrl = entUrl, loggedInHosts, timeoutMs, credentials },
+) {
+  const deadline = Date.now() + timeoutMs;
+  await page.goto(startUrl, { waitUntil: 'load', timeout: timeoutMs });
+  await settle(page, timeoutMs);
+
+  const done = { email: false, password: false };
   while (Date.now() < deadline) {
-    if (await adfsError.isVisible()) throw new LoginError('identifiants refusés');
-    if (isLoggedInHost(page.url(), loggedInHosts)) {
-      await settle(page, deadline - Date.now());
-      if (isLoggedInHost(page.url(), loggedInHosts)) return hostOf(page.url());
+    const action = nextLoginAction({ ...(await observe(page, loggedInHosts)), done });
+    try {
+      if (action === 'refused') throw new LoginError('identifiants refusés');
+      if (action === 'done') {
+        // Hôte connecté atteint : on revérifie après stabilisation (redirections JS, auto-post SAML).
+        await settle(page, deadline - Date.now());
+        if (isLoggedInHost(page.url(), loggedInHosts)) return hostOf(page.url());
+      } else if (action === 'fill-email') {
+        done.email = true;
+        await fillEmail(page, credentials);
+      } else if (action === 'fill-password') {
+        done.password = true;
+        await fillPassword(page, credentials);
+      } else {
+        await page.waitForTimeout(POLL_INTERVAL_MS);
+      }
+    } catch (error) {
+      if (error instanceof LoginError) throw error;
+      // Message Playwright jamais relayé : il peut contenir des URL à jetons.
+      throw new LoginError(`formulaire de login inattendu (hôte ${hostOf(page.url())})`);
     }
-    await page.waitForTimeout(POLL_INTERVAL_MS);
   }
-  throw new LoginError(`Login non terminé après ${Math.round(timeoutMs / 1000)} s`);
+  const reason =
+    done.email || done.password ? 'Login non terminé' : 'formulaire de login introuvable';
+  throw new LoginError(
+    `${reason} après ${Math.round(timeoutMs / 1000)} s (hôte ${hostOf(page.url())})`,
+  );
 }
