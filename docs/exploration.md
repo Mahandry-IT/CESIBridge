@@ -11,6 +11,7 @@ Résultats de la phase 1 (octobre 2026), base des outils CESIBridge de la phase 
 | `sts.viacesi.fr`      | ADFS (`#userNameInput`, `#passwordInput`)                                                        |
 | `moodle.cesi.fr`      | Moodle                                                                                           |
 | `univ.scholarvox.com` | Scholarvox (Cyberlibris)                                                                         |
+| `scenari.cesi.fr`     | Contenus de cours Scenari (activités LTI ouvertes depuis Moodle)                                 |
 
 ## Moodle
 

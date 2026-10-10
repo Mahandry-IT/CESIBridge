@@ -14,7 +14,7 @@
         "--storage-state",
         "data/state.json",
         "--allowed-origins",
-        "https://ent.cesi.fr;https://wayf.cesi.fr;https://sts.viacesi.fr;https://moodle.cesi.fr;https://univ.scholarvox.com",
+        "https://ent.cesi.fr;https://wayf.cesi.fr;https://sts.viacesi.fr;https://moodle.cesi.fr;https://univ.scholarvox.com;https://scenari.cesi.fr",
         "--output-dir",
         "data/playwright-mcp"
       ]

@@ -177,7 +177,7 @@ Redémarre Claude Desktop : les outils `cesi_*`, `moodle_*` et `scholarvox_get_t
 `.mcp.json` déclare un serveur `playwright` ([Playwright MCP](https://github.com/microsoft/playwright-mcp), version figée en devDependency) qui navigue avec la session CESIBridge :
 
 - `--storage-state data/state.json` + `--isolated` : la session est chargée en mémoire, le fichier n'est jamais modifié ;
-- `--allowed-origins` : ENT, `wayf.cesi.fr`, ADFS, Moodle et Scholarvox uniquement (les autres requêtes sont bloquées) ;
+- `--allowed-origins` : ENT, `wayf.cesi.fr`, ADFS, Moodle, Scholarvox et Scenari (contenus des activités LTI) uniquement (les autres requêtes sont bloquées) ;
 - `.claude/settings.json` : navigation et lecture autorisées, clics et saisies soumis à confirmation, exécution de code et envoi de fichiers interdits.
 
 Mise en place :
