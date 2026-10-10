@@ -106,6 +106,11 @@ CREATE TABLE examens_sources (
 );
 `,
   },
+  {
+    version: 4,
+    // Lien du cours Moodle rattaché à l'examen ; absent si aucun cours ne correspond.
+    sql: `ALTER TABLE examens ADD COLUMN cours_url text;`,
+  },
 ];
 
 // Clé du verrou consultatif propre à l'application (évite deux synchros concurrentes pendant les migrations).

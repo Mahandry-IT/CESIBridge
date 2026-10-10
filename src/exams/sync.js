@@ -4,6 +4,7 @@ import { getExamSource, listExams, replaceExams } from '../db/examens.js';
 import { log as defaultLog } from '../log.js';
 import { truncate } from '../text.js';
 import { applyCorrections, loadCorrections } from './corrections.js';
+import { linkCourses } from './courseLinks.js';
 import { ExamError } from './errors.js';
 import { readExamTable } from './ocr.js';
 import { parseExams } from './parse.js';
@@ -13,7 +14,7 @@ const MAX_LOGGED_LABEL = 80;
 const label = (value) => truncate(String(value ?? ''), MAX_LOGGED_LABEL);
 
 // À incrémenter quand la lecture ou le parsing change : les examens déjà en base sont alors relus.
-const READER_VERSION = '1';
+const READER_VERSION = '2';
 
 // L'empreinte couvre l'image, les corrections et la version du lecteur : tout changement relance la lecture.
 const fingerprint = (bytes, corrections) =>
@@ -68,7 +69,10 @@ export async function syncExams({
       `aucun examen lu pour ${scope.filiere} ${scope.niveau} (${rows.length} ligne(s), mode ${mode}) : base inchangée`,
     );
   }
-  const { exams, unmatched } = applyCorrections(read, corrections.entries, scope);
+  const corrected = applyCorrections(read, corrections.entries, scope);
+  // Après les corrections : les examens ajoutés à la main reçoivent aussi leur lien.
+  const exams = linkCourses(corrected.exams, image.courses ?? [], scope);
+  const { unmatched } = corrected;
   await replaceExams(pool, scope, exams, { sourceHash, imageUrl: image.url });
   report(log, { exams, rows: rows.length, mode, unmatched });
   return { exams, imageUrl: image.url, cached: false, mode };

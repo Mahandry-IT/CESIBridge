@@ -110,7 +110,7 @@ describe('syncExams', () => {
       'FISE Informatique',
       'A3',
       '2026-2027',
-      sha256('1', '\n', bytes, '\n', ''),
+      sha256('2', '\n', bytes, '\n', ''),
       IMAGE_URL,
     ]);
   });
@@ -134,7 +134,7 @@ describe('syncExams', () => {
       },
     ];
     const pool = fakePool({
-      source: { sourceHash: sha256('1', '\n', bytes, '\n', ''), imageUrl: IMAGE_URL },
+      source: { sourceHash: sha256('2', '\n', bytes, '\n', ''), imageUrl: IMAGE_URL },
       stored,
     });
     const { deps, result } = run({ pool });
@@ -154,7 +154,7 @@ describe('syncExams', () => {
     await writeFile(settings.correctionsFile, text);
     // La base connaît l'empreinte de la même image sans corrections.
     const pool = fakePool({
-      source: { sourceHash: sha256('1', '\n', bytes, '\n', ''), imageUrl: IMAGE_URL },
+      source: { sourceHash: sha256('2', '\n', bytes, '\n', ''), imageUrl: IMAGE_URL },
     });
     const { deps, result } = run({ pool });
     const { exams, cached } = await result;
@@ -165,7 +165,7 @@ describe('syncExams', () => {
       ['Épreuve B', '2026-11-05'],
       ['Épreuve A', '2026-12-01'],
     ]);
-    expect(pool.writes().at(-2).params[3]).toBe(sha256('1', '\n', bytes, '\n', text));
+    expect(pool.writes().at(-2).params[3]).toBe(sha256('2', '\n', bytes, '\n', text));
     expect(deps.log).toHaveBeenCalledWith('  Correction sans correspondance : Épreuve absente');
   });
 

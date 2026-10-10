@@ -62,6 +62,7 @@ function description(exam, imageUrl) {
   if (exam.aVerifier.length > 0) {
     lines.push(`À vérifier (lecture automatique) : ${exam.aVerifier.join(', ')}`);
   }
+  if (exam.coursUrl) lines.push(`Cours : ${exam.coursUrl}`);
   if (imageUrl) lines.push(`Calendrier d'origine : ${imageUrl}`);
   return lines.join('\n');
 }

@@ -160,7 +160,7 @@ Sans `CESI_FILIERE` ni `CESI_NIVEAU`, la fonctionnalité est désactivée.
 
 ### Ce qui est publié
 
-Un événement par examen, au titre de l'élément évalué. Les rattrapages sont préfixés « [Rattrapage] ». Si l'horaire manque, l'événement couvre la journée entière. Le bloc, le format, la session et la plateforme sont dans la description, avec le lien « Calendrier d'origine ». Les rappels sont toujours à 7 jours, plus les jours de `CESI_EXAM_REMINDER_DAYS`. Les examens ont leur propre marqueur : ils n'interfèrent pas avec les séances.
+Un événement par examen, au titre de l'élément évalué. Les rattrapages sont préfixés « [Rattrapage] ». Si l'horaire manque, l'événement couvre la journée entière. Le bloc, le format, la session et la plateforme sont dans la description, avec le lien « Calendrier d'origine » et, quand un seul cours Moodle de l'année et du niveau correspond au bloc, le lien « Cours » vers ce cours. Les rappels sont toujours à 7 jours, plus les jours de `CESI_EXAM_REMINDER_DAYS`. Les examens ont leur propre marqueur : ils n'interfèrent pas avec les séances.
 
 ### Lectures douteuses
 

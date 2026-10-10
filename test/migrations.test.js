@@ -25,7 +25,7 @@ describe('MIGRATIONS', () => {
   it('déclare la version 3 : examens et sources, sans rien supprimer', () => {
     const v3 = MIGRATIONS.find((m) => m.version === 3);
 
-    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3]);
+    expect(MIGRATIONS.map((m) => m.version)).toEqual([1, 2, 3, 4]);
     expect(v3.sql).toContain('CREATE TABLE examens (');
     expect(v3.sql).toContain('CREATE TABLE examens_sources (');
     expect(v3.sql).toContain('PRIMARY KEY (filiere, niveau, annee)');
@@ -60,8 +60,8 @@ describe('runMigrations', () => {
     const pool = fakePool([1]);
     await runMigrations(pool);
 
-    expect([...pool.versions].sort()).toEqual([1, 2, 3]);
-    expect(pool.log.filter((l) => l.startsWith('INSERT'))).toHaveLength(2);
+    expect([...pool.versions].sort()).toEqual([1, 2, 3, 4]);
+    expect(pool.log.filter((l) => l.startsWith('INSERT'))).toHaveLength(MIGRATIONS.length - 1);
   });
 
   it('annule la transaction et propage l’erreur si une migration échoue', async () => {

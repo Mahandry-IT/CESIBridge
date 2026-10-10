@@ -9,6 +9,7 @@ const EXAM_COLUMNS = [
   'date',
   'debut',
   'fin',
+  'coursUrl',
 ];
 
 /**
@@ -26,17 +27,17 @@ export async function replaceExams(pool, scope, exams, { sourceHash, imageUrl })
       annee,
     ]);
     if (exams.length > 0) {
-      const [ids, elements, blocs, formats, plateformes, sessions, dates, debuts, fins] =
+      const [ids, elements, blocs, formats, plateformes, sessions, dates, debuts, fins, coursUrls] =
         EXAM_COLUMNS.map((column) => exams.map((exam) => exam[column] ?? null));
       await client.query(
         `INSERT INTO examens
            (id, filiere, niveau, annee, element, bloc, format, plateforme, session,
-            jour, debut, fin, a_verifier, position)
+            jour, debut, fin, a_verifier, position, cours_url)
          SELECT t.id, $1, $2, $3, t.element, t.bloc, t.format, t.plateforme, t.session,
-                t.jour::date, t.debut::time, t.fin::time, t.a_verifier::text[], t.position
+                t.jour::date, t.debut::time, t.fin::time, t.a_verifier::text[], t.position, t.cours_url
          FROM unnest($4::text[], $5::text[], $6::text[], $7::text[], $8::text[], $9::text[],
-                     $10::text[], $11::text[], $12::text[], $13::text[], $14::int[])
-              AS t(id, element, bloc, format, plateforme, session, jour, debut, fin, a_verifier, position)`,
+                     $10::text[], $11::text[], $12::text[], $13::text[], $14::int[], $15::text[])
+              AS t(id, element, bloc, format, plateforme, session, jour, debut, fin, a_verifier, position, cours_url)`,
         [
           filiere,
           niveau,
@@ -53,6 +54,7 @@ export async function replaceExams(pool, scope, exams, { sourceHash, imageUrl })
           // Tableau de tableaux impossible via unnest : chaque liste est sérialisée en littéral PostgreSQL.
           exams.map((exam) => toArrayLiteral(exam.aVerifier ?? [])),
           exams.map((_exam, index) => index),
+          coursUrls,
         ],
       );
     }
@@ -89,7 +91,7 @@ export async function listExams(pool, scope) {
             to_char(jour, 'YYYY-MM-DD') AS date,
             to_char(debut, 'HH24:MI') AS debut,
             to_char(fin, 'HH24:MI') AS fin,
-            a_verifier
+            a_verifier, cours_url
      FROM examens
      WHERE filiere = $1 AND niveau = $2 AND annee = $3
      ORDER BY position`,
@@ -109,6 +111,7 @@ export async function listExams(pool, scope) {
     debut: row.debut,
     fin: row.fin,
     aVerifier: row.a_verifier,
+    coursUrl: row.cours_url,
   }));
 }
 

@@ -113,7 +113,8 @@ export function createMoodleService({ sessions, config, fetch = globalThis.fetch
 
   function fetchExamCalendar({ niveau, annee }) {
     return withMoodle(async ({ client, context }) => {
-      const course = selectSessionCourse(await fetchCourses(client), { niveau, annee });
+      const courses = await fetchCourses(client);
+      const course = selectSessionCourse(courses, { niveau, annee });
       const sections = mapCourseState(
         await client.call('core_courseformat_get_state', { courseid: course.id }),
       );
@@ -134,6 +135,8 @@ export function createMoodleService({ sessions, config, fetch = globalThis.fetch
         url: activity.url,
         courseId: course.id,
         courseName: course.name,
+        // Pour rattacher chaque examen à son cours.
+        courses: courses.map(({ name, url }) => ({ name, url })),
       };
     });
   }

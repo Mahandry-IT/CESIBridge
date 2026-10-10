@@ -163,3 +163,18 @@ describe('diffEvents pour les examens', () => {
     expect(diffEvents([], [course], options).toDelete).toEqual([]);
   });
 });
+
+describe('lien du cours', () => {
+  const url = 'https://moodle.cesi.fr/course/view.php?id=1';
+
+  it('ajoute le cours rattaché avant le calendrier d’origine', () => {
+    const lines = toExamEvent(exam({ coursUrl: url }), { imageUrl: 'https://x' }).description.split(
+      '\n',
+    );
+    expect(lines.at(-2)).toBe(`Cours : ${url}`);
+  });
+
+  it('ne met aucune ligne sans cours rattaché', () => {
+    expect(toExamEvent(exam({ coursUrl: null })).description).not.toContain('Cours :');
+  });
+});
