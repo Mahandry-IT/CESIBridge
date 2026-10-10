@@ -190,3 +190,89 @@ describe('configuration Google', () => {
     expect(() => loadPublishConfig({ DATABASE_URL: env.DATABASE_URL })).toThrow(ConfigError);
   });
 });
+
+describe('configuration des examens', () => {
+  const env = {
+    ...validEnv,
+    CESI_EMAIL: 'a.b@viacesi.fr',
+    CESI_PASSWORD: 's3cret',
+    DATABASE_URL: 'postgres://u:p@localhost:5432/db',
+  };
+  const exams = { CESI_FILIERE: 'FISE Informatique', CESI_NIVEAU: 'a3' };
+  const google = {
+    GOOGLE_CALENDAR_ID: 'cal@group.calendar.google.com',
+    GOOGLE_SERVICE_ACCOUNT_KEY_FILE: '/k.json',
+  };
+  const now = new Date('2026-10-10T10:00:00Z');
+
+  it('est désactivée par défaut, chaînes vides comprises', () => {
+    expect(loadSyncConfig(env).exams).toBeNull();
+    expect(loadSyncConfig({ ...env, CESI_FILIERE: '', CESI_NIVEAU: '' }).exams).toBeNull();
+  });
+
+  it('est activée avec les défauts, niveau normalisé en majuscules', () => {
+    expect(loadSyncConfig({ ...env, ...exams }, now).exams).toEqual({
+      filiere: 'FISE Informatique',
+      niveau: 'A3',
+      annee: '2026-2027',
+      reminderDays: [1],
+      correctionsFile: './data/exam-corrections.json',
+    });
+  });
+
+  it('est aussi lue par publish ; sync expose moodleUrl et la taille max', () => {
+    const publishEnv = { DATABASE_URL: env.DATABASE_URL, ...google, ...exams };
+    expect(loadPublishConfig(publishEnv, now).exams).toMatchObject({ niveau: 'A3' });
+    expect(loadSyncConfig(env)).toMatchObject({
+      moodleUrl: null,
+      downloadMaxBytes: 50 * 1024 * 1024,
+    });
+  });
+
+  it.each([
+    ['filière seule', { CESI_FILIERE: 'FISE Informatique' }],
+    ['niveau seul', { CESI_NIVEAU: 'A3' }],
+  ])('rejette : %s', (_label, override) => {
+    expect(() => loadSyncConfig({ ...env, ...override })).toThrow(/doivent être définies ensemble/);
+  });
+
+  it.each([
+    ['2026-07-31T21:59:59Z', '2025-2026'],
+    ['2026-07-31T22:00:00Z', '2026-2027'],
+    ['2026-12-31T23:30:00Z', '2026-2027'],
+    ['2027-01-15T12:00:00Z', '2026-2027'],
+  ])('année par défaut à %s (heure de Paris) : %s', (date, expected) => {
+    expect(loadSyncConfig({ ...env, ...exams }, new Date(date)).exams.annee).toBe(expected);
+  });
+
+  it('accepte une année explicite', () => {
+    expect(loadSyncConfig({ ...env, ...exams, CESI_ANNEE: '2024-2025' }).exams.annee).toBe(
+      '2024-2025',
+    );
+  });
+
+  it.each([
+    ['1', [1]],
+    ['3,1,2', [1, 2, 3]],
+    [' 2 , 2 , 7 ', [2, 7]],
+    ['1,2,3,3,4', [1, 2, 3, 4]],
+    ['27', [27]],
+    ['', [1]],
+  ])('rappels %j : %j', (value, expected) => {
+    const config = loadSyncConfig({ ...env, ...exams, CESI_EXAM_REMINDER_DAYS: value });
+    expect(config.exams.reminderDays).toEqual(expected);
+  });
+
+  it.each([
+    ['année non consécutive', { CESI_ANNEE: '2026-2028' }],
+    ['année mal formée', { CESI_ANNEE: '2026' }],
+    ['niveau inconnu', { CESI_NIVEAU: 'A6' }],
+    ['rappel à 0', { CESI_EXAM_REMINDER_DAYS: '0' }],
+    ['rappel à 28', { CESI_EXAM_REMINDER_DAYS: '28' }],
+    ['rappel non entier', { CESI_EXAM_REMINDER_DAYS: '1,x' }],
+    ['rappel vide dans la liste', { CESI_EXAM_REMINDER_DAYS: '1,,2' }],
+    ['5 rappels distincts', { CESI_EXAM_REMINDER_DAYS: '1,2,3,4,5' }],
+  ])('rejette : %s', (_label, override) => {
+    expect(() => loadSyncConfig({ ...env, ...exams, ...override })).toThrow(ConfigError);
+  });
+});

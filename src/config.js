@@ -9,6 +9,12 @@ const DEFAULT_DOWNLOAD_MAX_MB = 50;
 const MAX_DOWNLOAD_MAX_MB = 500;
 const BYTES_PER_MB = 1024 * 1024;
 const MOODLE_HOST = 'moodle.cesi.fr';
+const DEFAULT_EXAM_CORRECTIONS_FILE = './data/exam-corrections.json';
+const DEFAULT_EXAM_REMINDER_DAYS = Object.freeze([1]);
+const MAX_EXAM_REMINDER_DAYS = 27;
+const MAX_EXAM_REMINDERS = 4;
+// Les années scolaires commencent le 1er août.
+const SCHOOL_YEAR_START_MONTH = 8;
 
 const hostList = z
   .string()
@@ -64,6 +70,55 @@ const moodleUrlField = z.preprocess(
     .optional(),
 );
 
+const downloadMaxMbField = z.coerce
+  .number()
+  .int()
+  .min(1)
+  .max(MAX_DOWNLOAD_MAX_MB)
+  .default(DEFAULT_DOWNLOAD_MAX_MB);
+
+const optionalText = z.preprocess(emptyToUndefined, z.string().trim().min(1).optional());
+
+// Calendrier des examens : filière et niveau vont ensemble, le reste a des défauts.
+const examsShape = {
+  CESI_FILIERE: optionalText,
+  CESI_NIVEAU: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .trim()
+      .regex(/^A[1-5]$/i, 'niveau A1 à A5 attendu')
+      .transform((value) => value.toUpperCase())
+      .optional(),
+  ),
+  CESI_ANNEE: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .trim()
+      .regex(/^\d{4}-\d{4}$/, 'format AAAA-AAAA attendu')
+      .refine((value) => {
+        const [start, end] = value.split('-').map(Number);
+        return end === start + 1;
+      }, 'la seconde année doit suivre la première')
+      .optional(),
+  ),
+  CESI_EXAM_REMINDER_DAYS: z.preprocess(
+    emptyToUndefined,
+    z
+      .string()
+      .transform((value) => value.split(',').map((day) => day.trim()))
+      .pipe(z.array(z.coerce.number().int().min(1).max(MAX_EXAM_REMINDER_DAYS)).min(1))
+      .transform((days) => [...new Set(days)].sort((a, b) => a - b))
+      .pipe(z.array(z.number()).max(MAX_EXAM_REMINDERS, `${MAX_EXAM_REMINDERS} rappels maximum`))
+      .optional(),
+  ),
+  CESI_EXAM_CORRECTIONS_FILE: z.preprocess(
+    emptyToUndefined,
+    z.string().min(1).default(DEFAULT_EXAM_CORRECTIONS_FILE),
+  ),
+};
+
 const baseShape = {
   CESI_ENT_URL: z.url({ protocol: /^https?$/ }),
   CESI_LOGGED_IN_HOSTS: hostList,
@@ -82,12 +137,7 @@ const schema = z.object({
     emptyToUndefined,
     z.string().min(1).default(DEFAULT_DOWNLOAD_DIR),
   ),
-  CESI_DOWNLOAD_MAX_MB: z.coerce
-    .number()
-    .int()
-    .min(1)
-    .max(MAX_DOWNLOAD_MAX_MB)
-    .default(DEFAULT_DOWNLOAD_MAX_MB),
+  CESI_DOWNLOAD_MAX_MB: downloadMaxMbField,
 });
 
 // Variables requises uniquement par la synchronisation (login auto + base), pas par le serveur MCP.
@@ -100,7 +150,10 @@ const syncSchema = z.object({
   CESI_SCHEDULE_WEEKS: weeksField,
   CESI_HEADLESS: boolFlag(false),
   DATABASE_URL: databaseUrlField,
+  CESI_MOODLE_URL: moodleUrlField,
+  CESI_DOWNLOAD_MAX_MB: downloadMaxMbField,
   ...googleShape,
+  ...examsShape,
 });
 
 // `npm run publish` : republie depuis la base, sans ENT ni navigateur. Google est ici obligatoire.
@@ -110,6 +163,7 @@ const publishSchema = z.object({
   DATABASE_URL: databaseUrlField,
   GOOGLE_CALENDAR_ID: z.string().trim().min(1),
   GOOGLE_SERVICE_ACCOUNT_KEY_FILE: z.string().trim().min(1),
+  ...examsShape,
 });
 
 export class ConfigError extends Error {
@@ -151,6 +205,38 @@ function googleConfig(parsed) {
   return Object.freeze({ calendarId, keyFile });
 }
 
+// Année scolaire en cours, d'après la date de Paris (et non celle du fuseau du processus).
+function currentSchoolYear(now) {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'Europe/Paris',
+    year: 'numeric',
+    month: 'numeric',
+  }).formatToParts(now);
+  const year = Number(parts.find((part) => part.type === 'year').value);
+  const month = Number(parts.find((part) => part.type === 'month').value);
+  const start = month >= SCHOOL_YEAR_START_MONTH ? year : year - 1;
+  return `${start}-${start + 1}`;
+}
+
+// Examens facultatifs, mais filière et niveau vont ensemble.
+function examsConfig(parsed, now) {
+  const filiere = parsed.CESI_FILIERE;
+  const niveau = parsed.CESI_NIVEAU;
+  if (filiere === undefined && niveau === undefined) return null;
+  if (filiere === undefined || niveau === undefined) {
+    throw new ConfigError(
+      'Configuration invalide :\n  - CESI_FILIERE et CESI_NIVEAU doivent être définies ensemble',
+    );
+  }
+  return Object.freeze({
+    filiere,
+    niveau,
+    annee: parsed.CESI_ANNEE ?? currentSchoolYear(now),
+    reminderDays: Object.freeze(parsed.CESI_EXAM_REMINDER_DAYS ?? DEFAULT_EXAM_REMINDER_DAYS),
+    correctionsFile: parsed.CESI_EXAM_CORRECTIONS_FILE,
+  });
+}
+
 // Le mot de passe est non énumérable : absent de JSON.stringify, console.log et spread.
 function makeCredentials(email, password) {
   const credentials = { email };
@@ -180,7 +266,7 @@ export function loadConfig(env = process.env) {
   });
 }
 
-export function loadSyncConfig(env = process.env) {
+export function loadSyncConfig(env = process.env, now = new Date()) {
   const parsed = parseEnv(syncSchema, env);
   return Object.freeze({
     ...baseConfig(parsed),
@@ -190,15 +276,19 @@ export function loadSyncConfig(env = process.env) {
     headless: parsed.CESI_HEADLESS,
     databaseUrl: parsed.DATABASE_URL,
     google: googleConfig(parsed),
+    moodleUrl: parsed.CESI_MOODLE_URL ?? null,
+    downloadMaxBytes: parsed.CESI_DOWNLOAD_MAX_MB * BYTES_PER_MB,
+    exams: examsConfig(parsed, now),
   });
 }
 
-export function loadPublishConfig(env = process.env) {
+export function loadPublishConfig(env = process.env, now = new Date()) {
   const parsed = parseEnv(publishSchema, env);
   return Object.freeze({
     codePersonne: parsed.CESI_CODE_PERSONNE,
     scheduleWeeks: parsed.CESI_SCHEDULE_WEEKS,
     databaseUrl: parsed.DATABASE_URL,
     google: googleConfig(parsed),
+    exams: examsConfig(parsed, now),
   });
 }
