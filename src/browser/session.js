@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 import { chromium } from 'playwright';
@@ -34,7 +35,8 @@ export async function loadState(statePath) {
 export async function saveState(context, statePath) {
   const state = await context.storageState();
   await mkdir(dirname(statePath), { recursive: true, mode: 0o700 });
-  const tmpPath = `${statePath}.tmp`;
+  // Nom temporaire unique : deux enregistrements concurrents ne partagent pas le même fichier.
+  const tmpPath = `${statePath}.${randomUUID()}.tmp`;
   await writeFile(tmpPath, JSON.stringify(state), { mode: 0o600 });
   await rename(tmpPath, statePath);
   return {
