@@ -24,7 +24,9 @@ const days = (n) => ({ method: 'popup', minutes: n * 1440 });
 describe('examEventId', () => {
   it('est valide pour Google et stable', () => {
     const id = examEventId(exam({ id: 'Éx/ 1 é' }));
-    expect(id).toMatch(/^cesiexam[a-v0-9]+$/);
+    expect(id).toMatch(/^cesiepreuve[a-v0-9]+$/);
+    // Google refuse tout caractère hors base32hex, préfixe compris.
+    expect(id).toMatch(/^[a-v0-9]{5,1024}$/);
     expect(id.length).toBeGreaterThanOrEqual(5);
     expect(examEventId(exam({ id: 'Éx/ 1 é' }))).toBe(id);
     expect(examEventId(exam({ id: 'autre' }))).not.toBe(id);

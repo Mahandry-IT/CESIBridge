@@ -114,11 +114,13 @@ describe('diffEvents', () => {
 
   it('ne supprime pas un événement d’examen par défaut', () => {
     const exam = {
-      id: 'cesiexam1',
+      id: 'cesiepreuve1',
       extendedProperties: { private: { source: 'cesibridge-exam' } },
     };
     expect(diffEvents([], [exam]).toDelete).toEqual([]);
-    expect(diffEvents([], [exam], { source: 'cesibridge-exam' }).toDelete).toEqual(['cesiexam1']);
+    expect(diffEvents([], [exam], { source: 'cesibridge-exam' }).toDelete).toEqual([
+      'cesiepreuve1',
+    ]);
   });
 
   it('traite un lieu absent comme un lieu vide', () => {

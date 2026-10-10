@@ -3,7 +3,7 @@ import { nextDay, parisMidnight } from '../schedule/weeks.js';
 
 // Source et préfixe distincts de ceux des cours : `publishWeek` ne voit ni ne supprime jamais un examen.
 export const EXAM_SOURCE = 'cesibridge-exam';
-const ID_PREFIX = 'cesiexam';
+const ID_PREFIX = 'cesiepreuve';
 const MINUTES_PER_DAY = 1440;
 const WEEK_REMINDER = 7 * MINUTES_PER_DAY;
 // Limites de l'API : 5 rappels par événement, 4 semaines au plus avant le début.
